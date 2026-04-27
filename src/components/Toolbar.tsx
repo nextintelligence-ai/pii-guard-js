@@ -1,4 +1,5 @@
 import { useAppStore } from '@/state/store';
+import { MaskStylePicker } from './MaskStylePicker';
 
 type Props = {
   onLoad(f: File): void;
@@ -37,6 +38,7 @@ export function Toolbar({ onLoad, onApply, onDownload }: Props) {
       >
         Redo
       </button>
+      <MaskStylePicker />
       <div className="flex-1" />
       <button
         type="button"
