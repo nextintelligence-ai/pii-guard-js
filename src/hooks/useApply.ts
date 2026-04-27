@@ -37,11 +37,11 @@ export function useApply() {
   const download = useCallback(() => {
     const s = useAppStore.getState();
     if (s.doc.kind !== 'done') {
-      toast.error('다운로드할 결과가 없습니다');
+      toast.error('저장할 결과가 없습니다');
       return;
     }
     downloadBlob(s.doc.outputBlob, 'redacted.pdf');
-    toast.success('다운로드 시작');
+    toast.success('PDF 저장 시작');
   }, []);
 
   return { apply, download };

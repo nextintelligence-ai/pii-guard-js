@@ -113,7 +113,7 @@ export default function App() {
                       익명화가 끝났어요!
                     </span>
                     <br />
-                    상단의 다운로드 버튼을 눌러 저장하세요.
+                    상단의 'PDF 저장' 버튼을 눌러 내 PC에 저장하세요.
                   </AlertDescription>
                 </Alert>
               )}
@@ -154,7 +154,7 @@ export default function App() {
         onDoNotShowAgainChange={setDoNotShowUsageGuideAgain}
         onClose={closeUsageGuide}
       />
-      <Toaster position="top-right" />
+      <Toaster position="bottom-center" />
     </div>
   );
 }

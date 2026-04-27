@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, Undo2, Redo2, HelpCircle, Shield, Download } from 'lucide-react';
+import { FolderOpen, Undo2, Redo2, HelpCircle, Shield, Save } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -37,8 +37,8 @@ export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
           }}
         />
         <Button size="sm" onClick={() => inputRef.current?.click()}>
-          <Upload />
-          업로드
+          <FolderOpen />
+          PDF 열기
         </Button>
 
         <Separator orientation="vertical" className="h-6" />
@@ -96,8 +96,8 @@ export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
           익명화 적용
         </Button>
         <Button size="sm" onClick={onDownload} disabled={docKind !== 'done'}>
-          <Download />
-          다운로드
+          <Save />
+          PDF 저장
         </Button>
       </div>
     </TooltipProvider>

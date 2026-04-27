@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, Download } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Save } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { useApply } from '@/hooks/useApply';
 import {
@@ -68,8 +68,8 @@ export function ReportModal() {
             닫기
           </Button>
           <Button onClick={download}>
-            <Download />
-            다운로드
+            <Save />
+            PDF 저장
           </Button>
         </DialogFooter>
       </DialogContent>
