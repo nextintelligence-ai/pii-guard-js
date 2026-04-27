@@ -9,7 +9,6 @@
  * 이 모듈은 dynamic import 로 그 순서를 보장한다.
  */
 import type * as MupdfNS from 'mupdf';
-import { MUPDF_WASM_BASE64, MUPDF_WASM_BYTE_LENGTH } from '@/wasm/mupdfBinary';
 import { runDetectors } from '@/core/detectors';
 import type { LineForScan } from '@/core/detectors/types';
 import {
@@ -30,29 +29,42 @@ type MupdfModule = typeof MupdfNS;
 
 let mupdfModulePromise: Promise<MupdfModule> | null = null;
 
-/** Base64 → Uint8Array 디코더 (브라우저/워커 환경 동작). */
-function decodeBase64(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) {
-    out[i] = bin.charCodeAt(i);
+type WasmDeferred = {
+  promise: Promise<Uint8Array>;
+  resolve: (b: Uint8Array) => void;
+};
+let wasmDeferred: WasmDeferred | null = null;
+
+function getWasmDeferred(): WasmDeferred {
+  if (!wasmDeferred) {
+    let resolve!: (b: Uint8Array) => void;
+    const promise = new Promise<Uint8Array>((r) => {
+      resolve = r;
+    });
+    wasmDeferred = { promise, resolve };
   }
-  return out;
+  return wasmDeferred;
 }
 
 /**
- * mupdf 를 base64 WASM 으로 1회 초기화하고 모듈 네임스페이스를 반환한다.
+ * WASM 바이너리를 외부에서 주입한다.
+ * - 워커 환경: 메인이 postMessage 로 전달한 ArrayBuffer 를 Uint8Array 로 감싸 호출.
+ * - Node 테스트: `decodeMupdfWasm()` 결과를 직접 호출.
+ *
+ * 두 번 이상 호출돼도 첫 호출의 buffer 만 적용된다 (Promise.resolve idempotency).
+ */
+export function setWasmBinary(buf: Uint8Array): void {
+  getWasmDeferred().resolve(buf);
+}
+
+/**
+ * mupdf 를 외부 주입 WASM 바이너리로 1회 초기화하고 모듈 네임스페이스를 반환한다.
  * 동시 호출되어도 단일 Promise 를 공유한다.
  */
 export function ensureMupdfReady(): Promise<MupdfModule> {
   if (!mupdfModulePromise) {
     mupdfModulePromise = (async () => {
-      const wasmBinary = decodeBase64(MUPDF_WASM_BASE64);
-      if (wasmBinary.byteLength !== MUPDF_WASM_BYTE_LENGTH) {
-        throw new Error(
-          `mupdf WASM byteLength 불일치: 기대 ${MUPDF_WASM_BYTE_LENGTH}, 실제 ${wasmBinary.byteLength}`,
-        );
-      }
+      const wasmBinary = await getWasmDeferred().promise;
       // mupdf-wasm.js 가 globalThis["$libmupdf_wasm_Module"] 을 Emscripten Module 로 사용한다.
       // wasmBinary 를 미리 주입해 fetch 없이 인스턴스화한다.
       const g = globalThis as unknown as Record<string, unknown>;
@@ -65,7 +77,6 @@ export function ensureMupdfReady(): Promise<MupdfModule> {
         ...existingObj,
         wasmBinary,
       };
-      // 동적 import 로 평가 시점을 보장.
       const mod = (await import('mupdf')) as MupdfModule;
       return mod;
     })();
