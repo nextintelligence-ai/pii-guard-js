@@ -14,6 +14,7 @@ const COLORS: Record<string, string> = {
   account: 'rgba(22,163,74,0.35)',
   businessNo: 'rgba(168,85,247,0.35)',
   card: 'rgba(202,138,4,0.35)',
+  address: 'rgba(236,72,153,0.35)',
   manual: 'rgba(15,23,42,0.45)',
 };
 const STROKE: Record<string, string> = {
@@ -23,6 +24,7 @@ const STROKE: Record<string, string> = {
   account: '#16a34a',
   businessNo: '#a855f7',
   card: '#ca8a04',
+  address: '#ec4899',
   manual: '#0f172a',
 };
 
