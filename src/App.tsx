@@ -1,6 +1,7 @@
 import { useAppStore } from '@/state/store';
 import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
+import { PdfCanvas } from '@/components/PdfCanvas';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 
 export default function App() {
@@ -28,8 +29,12 @@ export default function App() {
         <section className="bg-white rounded shadow p-3 flex items-center justify-center">
           {doc.kind === 'empty' || doc.kind === 'loading' ? (
             <DropZone onFile={load} />
+          ) : doc.kind === 'ready' ? (
+            <div className="overflow-auto max-h-[calc(100vh-100px)]">
+              <PdfCanvas />
+            </div>
           ) : (
-            <div>페이지 캔버스 자리 (Task 2.5에서 구현)</div>
+            <div className="text-slate-500">상태: {doc.kind}</div>
           )}
         </section>
       </main>
