@@ -32,8 +32,8 @@ const api: Partial<PdfWorkerApi> = {
     const lines = await extractLines(pageIndex);
     return runDetectors(lines);
   },
-  async apply(boxes, maskStyle) {
-    const r = await applyRedactions(boxes, maskStyle);
+  async apply(boxes) {
+    const r = await applyRedactions(boxes);
     return transfer(r, [r.pdf.buffer]);
   },
   async close() {

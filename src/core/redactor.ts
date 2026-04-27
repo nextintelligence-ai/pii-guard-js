@@ -16,7 +16,6 @@ import type * as MupdfNS from 'mupdf';
 import type {
   ApplyReport,
   DetectionCategory,
-  MaskStyle,
   RedactionBox,
 } from '@/types/domain';
 
@@ -41,12 +40,6 @@ function makeEmptyCounts(): ApplyReport['byCategory'] {
   };
 }
 
-function maskToText(maskStyle: MaskStyle): string | null {
-  if (maskStyle.kind === 'label') return maskStyle.label;
-  if (maskStyle.kind === 'pattern') return maskStyle.pattern;
-  return null;
-}
-
 /**
  * 활성화된 박스들을 PDFPage Redact 어노테이션으로 변환한다.
  * - 영향 받은 페이지 인덱스 집합 / 카테고리별 카운트 / 총 적용 개수 반환.
@@ -55,12 +48,10 @@ function maskToText(maskStyle: MaskStyle): string | null {
 export function buildRedactAnnotations(
   pdfDoc: MupdfNS.PDFDocument,
   boxes: RedactionBox[],
-  maskStyle: MaskStyle,
 ): { pages: number[]; counts: ApplyReport['byCategory']; total: number } {
   const counts = makeEmptyCounts();
   const pageSet = new Set<number>();
   let total = 0;
-  const overlayText = maskToText(maskStyle);
 
   for (const box of boxes) {
     if (!box.enabled) continue;
@@ -68,11 +59,6 @@ export function buildRedactAnnotations(
     try {
       const annot = page.createAnnotation('Redact');
       annot.setRect([box.bbox[0], box.bbox[1], box.bbox[2], box.bbox[3]]);
-      // mupdf 1.27 에서는 Redact overlay text 를 setContents 로 지정한다.
-      // (전용 setOverlayText 가 d.ts 에 존재하지 않음.)
-      if (overlayText !== null && overlayText.length > 0) {
-        annot.setContents(overlayText);
-      }
       annot.update();
       const cat: DetectionCategory | 'manual' = box.category ?? 'manual';
       counts[cat] += 1;

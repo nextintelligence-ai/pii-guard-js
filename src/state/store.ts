@@ -4,7 +4,6 @@ import type {
   Bbox,
   Candidate,
   DetectionCategory,
-  MaskStyle,
   PageMeta,
   RedactionBox,
 } from '@/types/domain';
@@ -25,7 +24,6 @@ type State = {
   candidates: Candidate[];
   boxes: Record<string, RedactionBox>;
   selectedBoxId: string | null;
-  maskStyle: MaskStyle;
   categoryEnabled: Record<DetectionCategory, boolean>;
   reportDismissed: boolean;
 };
@@ -43,7 +41,6 @@ type Actions = {
   updateBox(id: string, patch: Partial<RedactionBox>): void;
   deleteBox(id: string): void;
   selectBox(id: string | null): void;
-  setMaskStyle(s: MaskStyle): void;
   undo(): void;
   redo(): void;
   reset(): void;
@@ -55,7 +52,6 @@ const initial: State = {
   candidates: [],
   boxes: {},
   selectedBoxId: null,
-  maskStyle: { kind: 'blackout' },
   categoryEnabled: {
     rrn: true,
     phone: true,
@@ -190,9 +186,6 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   },
   selectBox(id) {
     set({ selectedBoxId: id });
-  },
-  setMaskStyle(m) {
-    set({ maskStyle: m });
   },
   undo() {
     const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };

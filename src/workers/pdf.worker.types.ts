@@ -1,7 +1,6 @@
 import type {
   ApplyReport,
   Candidate,
-  MaskStyle,
   PageMeta,
   RedactionBox,
   TextSpan,
@@ -21,9 +20,6 @@ export interface PdfWorkerApi {
   }>;
   extractSpans(pageIndex: number): Promise<TextSpan[]>;
   detectAll(pageIndex: number): Promise<Candidate[]>;
-  apply(
-    boxes: RedactionBox[],
-    maskStyle: MaskStyle,
-  ): Promise<{ pdf: Uint8Array; report: ApplyReport }>;
+  apply(boxes: RedactionBox[]): Promise<{ pdf: Uint8Array; report: ApplyReport }>;
   close(): Promise<void>;
 }

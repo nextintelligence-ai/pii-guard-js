@@ -36,11 +36,6 @@ export type RedactionBox = {
   enabled: boolean;
 };
 
-export type MaskStyle =
-  | { kind: 'blackout' }
-  | { kind: 'label'; label: string }
-  | { kind: 'pattern'; pattern: string };
-
 export type PageMeta = {
   index: number;
   widthPt: number;

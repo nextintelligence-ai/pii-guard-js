@@ -52,7 +52,7 @@ describe('통합: 디지털 PDF 익명화', () => {
       enabled: true,
     }));
 
-    const { pdf, report } = await applyRedactions(boxes, { kind: 'blackout' });
+    const { pdf, report } = await applyRedactions(boxes);
     expect(pdf.byteLength).toBeGreaterThan(0);
     expect(report.totalBoxes).toBe(boxes.length);
     expect(report.postCheckLeaks).toBe(0);
@@ -81,7 +81,7 @@ describe('통합: 디지털 PDF 익명화', () => {
       };
     });
 
-    const { report } = await applyRedactions(boxes, { kind: 'blackout' });
+    const { report } = await applyRedactions(boxes);
     expect(report.totalBoxes).toBe(boxes.length);
     expect(report.postCheckLeaks).toBe(0);
   });

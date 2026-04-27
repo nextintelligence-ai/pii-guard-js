@@ -19,7 +19,6 @@ import {
 import type {
   ApplyReport,
   Bbox,
-  MaskStyle,
   PageMeta,
   RedactionBox,
   TextSpan,
@@ -367,7 +366,6 @@ export async function extractLines(
  */
 export async function applyRedactions(
   boxes: RedactionBox[],
-  maskStyle: MaskStyle,
 ): Promise<{ pdf: Uint8Array; report: ApplyReport }> {
   const mupdf = await ensureMupdfReady();
   const doc = requireDoc();
@@ -376,11 +374,7 @@ export async function applyRedactions(
     throw new Error('NOT_A_PDF_DOCUMENT');
   }
 
-  const { pages: pagesAffected, counts, total } = buildRedactAnnotations(
-    pdfDoc,
-    boxes,
-    maskStyle,
-  );
+  const { pages: pagesAffected, counts, total } = buildRedactAnnotations(pdfDoc, boxes);
   applyAllRedactions(pdfDoc, pagesAffected);
   clearMetadata(pdfDoc);
 

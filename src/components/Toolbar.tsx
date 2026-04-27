@@ -9,7 +9,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { MaskStylePicker } from './MaskStylePicker';
 
 type Props = {
   onLoad(f: File): void;
@@ -72,8 +71,6 @@ export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
         </Tooltip>
 
         <Separator orientation="vertical" className="h-6" />
-
-        <MaskStylePicker />
 
         <Tooltip>
           <TooltipTrigger asChild>
