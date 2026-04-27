@@ -3,8 +3,10 @@ import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
 import { PdfCanvas } from '@/components/PdfCanvas';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
+import { useAutoDetect } from '@/hooks/useAutoDetect';
 
 export default function App() {
+  useAutoDetect();
   const { load } = usePdfDocument();
   const doc = useAppStore((s) => s.doc);
 
