@@ -128,7 +128,7 @@ export default function App() {
             <DropZone onFile={load} />
           ) : doc.kind === "ready" ? (
             <>
-              <div className="overflow-auto max-h-[calc(100vh-180px)]">
+              <div className="w-full overflow-auto max-h-[calc(100vh-180px)]">
                 <PdfCanvas />
               </div>
               <PageNavigator />

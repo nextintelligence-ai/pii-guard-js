@@ -8,8 +8,12 @@ export function PdfCanvas() {
   const { meta } = useCanvasPainter(el);
 
   return (
-    <div className="relative inline-block">
-      <canvas ref={setRef} className="block bg-white shadow" />
+    <div className="relative block w-full">
+      <canvas
+        ref={setRef}
+        className="block bg-white shadow"
+        style={{ width: '100%', height: 'auto' }}
+      />
       {meta && <BoxOverlay {...meta} />}
       {meta && (
         <div className="absolute bottom-1 right-2 text-xs text-slate-400">

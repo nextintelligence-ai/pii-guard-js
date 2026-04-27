@@ -124,8 +124,11 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
   if (!meta) return null;
 
   const pointerPos = (e: RPE<SVGElement>): [number, number] => {
+    // SVG 가 CSS 로 리스케일될 수 있으므로 viewBox user-units 로 환산한다.
     const rect = ref.current!.getBoundingClientRect();
-    return [e.clientX - rect.left, e.clientY - rect.top];
+    const sx = rect.width > 0 ? widthPx / rect.width : 1;
+    const sy = rect.height > 0 ? heightPx / rect.height : 1;
+    return [(e.clientX - rect.left) * sx, (e.clientY - rect.top) * sy];
   };
 
   const commitBboxToPdf = (id: string, canvasBbox: Bbox) => {
@@ -269,9 +272,9 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
   return (
     <svg
       ref={ref}
-      className="absolute left-0 top-0"
-      width={widthPx}
-      height={heightPx}
+      className="absolute left-0 top-0 h-full w-full"
+      viewBox={`0 0 ${widthPx} ${heightPx}`}
+      preserveAspectRatio="xMinYMin meet"
       style={{ cursor: interaction.mode === 'idle' ? 'crosshair' : 'default' }}
       onPointerDown={onSvgDown}
       onPointerMove={onSvgMove}
