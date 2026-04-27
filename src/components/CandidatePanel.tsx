@@ -65,7 +65,9 @@ export function CandidatePanel() {
   const toggle = useAppStore((s) => s.toggleBox);
   const toggleCat = useAppStore((s) => s.toggleCategory);
   const goToPage = useAppStore((s) => s.goToPage);
+  const focusBox = useAppStore((s) => s.focusBox);
   const deleteBox = useAppStore((s) => s.deleteBox);
+  const selectedBoxId = useAppStore((s) => s.selectedBoxId);
 
   const totalAuto = autoBoxes.length;
 
@@ -88,9 +90,14 @@ export function CandidatePanel() {
               cat={cat}
               items={items}
               enabled={cats[cat]}
+              selectedBoxId={selectedBoxId}
               onToggleCategory={() => toggleCat(cat)}
               onToggleBox={toggle}
               onGoTo={goToPage}
+              onFocusBox={(id, page) => {
+                goToPage(page);
+                focusBox(id);
+              }}
             />
           );
         })}
@@ -107,8 +114,13 @@ export function CandidatePanel() {
         </div>
         <ManualGroup
           items={manualBoxes}
+          selectedBoxId={selectedBoxId}
           onToggleBox={toggle}
           onGoTo={goToPage}
+          onFocusBox={(id, page) => {
+            goToPage(page);
+            focusBox(id);
+          }}
           onDelete={deleteBox}
         />
       </section>
@@ -120,18 +132,22 @@ type GroupProps = {
   cat: DetectionCategory;
   items: AutoBox[];
   enabled: boolean;
+  selectedBoxId: string | null;
   onToggleCategory(): void;
   onToggleBox(id: string): void;
   onGoTo(page: number): void;
+  onFocusBox(id: string, page: number): void;
 };
 
 function CategoryGroup({
   cat,
   items,
   enabled,
+  selectedBoxId,
   onToggleCategory,
   onToggleBox,
   onGoTo,
+  onFocusBox,
 }: GroupProps) {
   const [open, setOpen] = useState(items.length > 0 && items.length <= 30);
 
@@ -187,21 +203,36 @@ function CategoryGroup({
                   p{page + 1} ({group.length})
                 </button>
                 <ul className="ml-2 mt-1 space-y-1">
-                  {group.map((b) => (
-                    <li key={b.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={b.id}
-                        checked={b.enabled}
-                        onCheckedChange={() => onToggleBox(b.id)}
-                      />
-                      <Label
-                        htmlFor={b.id}
-                        className="cursor-pointer text-xs font-normal text-muted-foreground"
-                      >
-                        박스 #{b.id.slice(-6)}
-                      </Label>
-                    </li>
-                  ))}
+                  {group.map((b) => {
+                    const isSelected = selectedBoxId === b.id;
+                    return (
+                      <li key={b.id}>
+                        <button
+                          type="button"
+                          className={cn(
+                            'flex w-full items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-accent',
+                            isSelected && 'bg-accent',
+                          )}
+                          onClick={() => onFocusBox(b.id, b.pageIndex)}
+                          aria-label={`박스 #${b.id.slice(-6)} 위치로 이동`}
+                        >
+                          <span
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              id={b.id}
+                              checked={b.enabled}
+                              onCheckedChange={() => onToggleBox(b.id)}
+                            />
+                          </span>
+                          <span className="text-xs font-normal text-muted-foreground">
+                            박스 #{b.id.slice(-6)}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
@@ -214,12 +245,21 @@ function CategoryGroup({
 
 type ManualGroupProps = {
   items: ManualBox[];
+  selectedBoxId: string | null;
   onToggleBox(id: string): void;
   onGoTo(page: number): void;
+  onFocusBox(id: string, page: number): void;
   onDelete(id: string): void;
 };
 
-function ManualGroup({ items, onToggleBox, onGoTo, onDelete }: ManualGroupProps) {
+function ManualGroup({
+  items,
+  selectedBoxId,
+  onToggleBox,
+  onGoTo,
+  onFocusBox,
+  onDelete,
+}: ManualGroupProps) {
   const [open, setOpen] = useState(items.length > 0 && items.length <= 30);
 
   const byPage = useMemo(() => {
@@ -269,32 +309,47 @@ function ManualGroup({ items, onToggleBox, onGoTo, onDelete }: ManualGroupProps)
                       b.source === 'text-select' ? TextCursorInput : MousePointerSquareDashed;
                     const sourceLabel =
                       b.source === 'text-select' ? '텍스트 선택' : '직접 그림';
+                    const isSelected = selectedBoxId === b.id;
                     return (
-                      <li key={b.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={b.id}
-                          checked={b.enabled}
-                          onCheckedChange={() => onToggleBox(b.id)}
-                        />
-                        <Icon
-                          className="h-3 w-3 shrink-0 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <Label
-                          htmlFor={b.id}
-                          className="flex-1 cursor-pointer truncate text-xs font-normal text-muted-foreground"
-                          title={b.label ?? sourceLabel}
+                      <li key={b.id}>
+                        <div
+                          className={cn(
+                            'flex items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-accent',
+                            isSelected && 'bg-accent',
+                          )}
                         >
-                          {b.label ?? sourceLabel} #{b.id.slice(-6)}
-                        </Label>
-                        <button
-                          type="button"
-                          className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
-                          onClick={() => onDelete(b.id)}
-                          aria-label="삭제"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                          <span
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              id={b.id}
+                              checked={b.enabled}
+                              onCheckedChange={() => onToggleBox(b.id)}
+                            />
+                          </span>
+                          <Icon
+                            className="h-3 w-3 shrink-0 text-muted-foreground"
+                            aria-hidden
+                          />
+                          <button
+                            type="button"
+                            className="flex-1 cursor-pointer truncate text-left text-xs font-normal text-muted-foreground"
+                            title={b.label ?? sourceLabel}
+                            onClick={() => onFocusBox(b.id, b.pageIndex)}
+                            aria-label={`${b.label ?? sourceLabel} #${b.id.slice(-6)} 위치로 이동`}
+                          >
+                            {b.label ?? sourceLabel} #{b.id.slice(-6)}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive"
+                            onClick={() => onDelete(b.id)}
+                            aria-label="삭제"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </li>
                     );
                   })}

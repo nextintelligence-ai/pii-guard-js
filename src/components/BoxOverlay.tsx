@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as RPE } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as RPE } from 'react';
 import { useAppStore } from '@/state/store';
 import { useBoxesForPage } from '@/state/selectors';
 import { useSpansForPage } from '@/hooks/useSpansForPage';
@@ -117,11 +117,25 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
   const docPages = useAppStore((s) => (s.doc.kind === 'ready' ? s.doc.pages : null));
   const boxes = useBoxesForPage(page);
   const selectedBoxId = useAppStore((s) => s.selectedBoxId);
+  const focusNonce = useAppStore((s) => s.focusNonce);
   const meta = docPages?.[page];
   const spans = useSpansForPage(page, !!meta);
 
   const [interaction, setInteraction] = useState<Interaction>({ mode: 'idle' });
   const ref = useRef<SVGSVGElement | null>(null);
+  const selectedRectRef = useRef<SVGRectElement | null>(null);
+
+  // 사이드바 행 클릭 등으로 focusNonce 가 증가하면 선택된 박스로 스크롤.
+  useEffect(() => {
+    if (!selectedBoxId || !meta) return;
+    const onPage = boxes.some((b) => b.id === selectedBoxId);
+    if (!onPage) return;
+    selectedRectRef.current?.scrollIntoView({
+      block: 'center',
+      inline: 'center',
+      behavior: 'smooth',
+    });
+  }, [focusNonce, selectedBoxId, page, meta, scale, boxes]);
 
   if (!meta) return null;
 
@@ -299,6 +313,7 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
         return (
           <rect
             key={b.id}
+            ref={isSelected ? selectedRectRef : null}
             x={r[0]}
             y={r[1]}
             width={r[2] - r[0]}

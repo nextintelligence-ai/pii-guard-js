@@ -24,6 +24,7 @@ type State = {
   candidates: Candidate[];
   boxes: Record<string, RedactionBox>;
   selectedBoxId: string | null;
+  focusNonce: number;
   categoryEnabled: Record<DetectionCategory, boolean>;
   reportDismissed: boolean;
 };
@@ -41,6 +42,7 @@ type Actions = {
   updateBox(id: string, patch: Partial<RedactionBox>): void;
   deleteBox(id: string): void;
   selectBox(id: string | null): void;
+  focusBox(id: string): void;
   undo(): void;
   redo(): void;
   reset(): void;
@@ -52,6 +54,7 @@ const initial: State = {
   candidates: [],
   boxes: {},
   selectedBoxId: null,
+  focusNonce: 0,
   categoryEnabled: {
     rrn: true,
     phone: true,
@@ -187,6 +190,11 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   },
   selectBox(id) {
     set({ selectedBoxId: id });
+  },
+  focusBox(id) {
+    // 사이드바 행 클릭 같은 외부 트리거에서 사용. 같은 박스 재클릭 시에도
+    // BoxOverlay 의 스크롤/강조 effect 가 다시 발화하도록 nonce 를 증가시킨다.
+    set((s) => ({ selectedBoxId: id, focusNonce: s.focusNonce + 1 }));
   },
   undo() {
     const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };

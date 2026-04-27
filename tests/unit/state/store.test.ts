@@ -27,4 +27,24 @@ describe('AppStore', () => {
     expect(Object.keys(useAppStore.getState().boxes).length).toBe(0);
     expect(useAppStore.getState().doc.kind).toBe('empty');
   });
+
+  it('focusBox 가 selectedBoxId 를 갱신하고 focusNonce 를 증가시킨다', () => {
+    const s = useAppStore.getState();
+    s.addManualBox({ pageIndex: 2, bbox: [0, 0, 10, 10] });
+    const id = Object.keys(useAppStore.getState().boxes)[0]!;
+    const beforeNonce = useAppStore.getState().focusNonce;
+    s.focusBox(id);
+    expect(useAppStore.getState().selectedBoxId).toBe(id);
+    expect(useAppStore.getState().focusNonce).toBe(beforeNonce + 1);
+  });
+
+  it('동일 박스를 focusBox 로 두 번 눌러도 focusNonce 가 매번 증가한다', () => {
+    const s = useAppStore.getState();
+    s.addManualBox({ pageIndex: 0, bbox: [0, 0, 10, 10] });
+    const id = Object.keys(useAppStore.getState().boxes)[0]!;
+    s.focusBox(id);
+    const firstNonce = useAppStore.getState().focusNonce;
+    s.focusBox(id);
+    expect(useAppStore.getState().focusNonce).toBe(firstNonce + 1);
+  });
 });
