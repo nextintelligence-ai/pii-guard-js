@@ -1,6 +1,7 @@
 import { expose, transfer } from 'comlink';
 import { runDetectors } from '@/core/detectors';
 import {
+  applyRedactions,
   closeDocument,
   ensureMupdfReady,
   extractLines,
@@ -30,6 +31,11 @@ const api: Partial<PdfWorkerApi> = {
   async detectAll(pageIndex) {
     const lines = await extractLines(pageIndex);
     return runDetectors(lines);
+  },
+  async apply(boxes, maskStyle) {
+    const r = await applyRedactions(boxes, maskStyle);
+    // pdf 바이트는 transferable 로 메인 스레드에 zero-copy 이관.
+    return transfer(r, [r.pdf.buffer]);
   },
   async close() {
     closeDocument();

@@ -10,7 +10,21 @@
  */
 import type * as MupdfNS from 'mupdf';
 import { MUPDF_WASM_BASE64, MUPDF_WASM_BYTE_LENGTH } from '@/wasm/mupdfBinary';
-import type { PageMeta, TextSpan, Bbox } from '@/types/domain';
+import { runDetectors } from '@/core/detectors';
+import type { LineForScan } from '@/core/detectors/types';
+import {
+  buildRedactAnnotations,
+  applyAllRedactions,
+  clearMetadata,
+} from '@/core/redactor';
+import type {
+  ApplyReport,
+  Bbox,
+  MaskStyle,
+  PageMeta,
+  RedactionBox,
+  TextSpan,
+} from '@/types/domain';
 
 type MupdfModule = typeof MupdfNS;
 
@@ -261,17 +275,13 @@ export async function extractSpans(pageIndex: number): Promise<TextSpan[]> {
 }
 
 /**
- * 라인 단위 텍스트 + 글자 bbox 추출.
- *
- * 각 `onChar` 콜백의 `quad`(8개 좌표: 4개 코너) 에서 axis-aligned bbox 를 계산해
- * `charBboxes` 에 누적한다. surrogate pair 는 JS string 으로 전달되며 `text` 길이와
- * `charBboxes` 길이를 일치시키기 위해 char 단위 push 를 그대로 사용한다.
+ * 임의의 mupdf Document 핸들에서 라인 단위 텍스트 + 글자 bbox 를 추출한다.
+ * `extractLines` 와 postCheck (재오픈한 임시 문서 대상) 양쪽에서 사용한다.
  */
-export async function extractLines(
+function extractLinesFromDoc(
+  doc: MupdfNS.Document,
   pageIndex: number,
-): Promise<{ pageIndex: number; text: string; charBboxes: Bbox[] }[]> {
-  await ensureMupdfReady();
-  const doc = requireDoc();
+): { pageIndex: number; text: string; charBboxes: Bbox[] }[] {
   const page = doc.loadPage(pageIndex);
   let stext: MupdfNS.StructuredText | null = null;
   try {
@@ -323,6 +333,83 @@ export async function extractLines(
     stext?.destroy();
     page.destroy();
   }
+}
+
+/**
+ * 라인 단위 텍스트 + 글자 bbox 추출.
+ *
+ * 각 `onChar` 콜백의 `quad`(8개 좌표: 4개 코너) 에서 axis-aligned bbox 를 계산해
+ * `charBboxes` 에 누적한다. surrogate pair 는 JS string 으로 전달되며 `text` 길이와
+ * `charBboxes` 길이를 일치시키기 위해 char 단위 push 를 그대로 사용한다.
+ */
+export async function extractLines(
+  pageIndex: number,
+): Promise<{ pageIndex: number; text: string; charBboxes: Bbox[] }[]> {
+  await ensureMupdfReady();
+  const doc = requireDoc();
+  return extractLinesFromDoc(doc, pageIndex);
+}
+
+/**
+ * 적용 단계: 박스를 Redact 어노테이션으로 변환 → applyRedactions →
+ * 메타데이터 클리어 → saveToBuffer → 결과를 다시 열어 postCheck 로 누수 검증.
+ */
+export async function applyRedactions(
+  boxes: RedactionBox[],
+  maskStyle: MaskStyle,
+): Promise<{ pdf: Uint8Array; report: ApplyReport }> {
+  const mupdf = await ensureMupdfReady();
+  const doc = requireDoc();
+  const pdfDoc = doc.asPDF();
+  if (!pdfDoc) {
+    throw new Error('NOT_A_PDF_DOCUMENT');
+  }
+
+  const { pages: pagesAffected, counts, total } = buildRedactAnnotations(
+    pdfDoc,
+    boxes,
+    maskStyle,
+  );
+  applyAllRedactions(pdfDoc, pagesAffected);
+  clearMetadata(pdfDoc);
+
+  // saveToBuffer 옵션은 string("k=v,...") 또는 record 둘 다 받는다.
+  // garbage=4: 미참조 객체 정리, deflate=yes: 스트림 압축.
+  const savedBuf = pdfDoc.saveToBuffer('garbage=4,compress=yes');
+  let outBytes: Uint8Array;
+  try {
+    // asUint8Array 결과는 wasm 메모리를 참조하므로 외부에서 다시 열기 전에 복사한다.
+    outBytes = new Uint8Array(savedBuf.asUint8Array());
+  } finally {
+    savedBuf.destroy();
+  }
+
+  // postCheck: 결과 PDF 를 임시로 다시 열어 모든 페이지 텍스트를 다시 스캔.
+  let postCheckLeaks = 0;
+  let verifyDoc: MupdfNS.Document | null = null;
+  try {
+    // openDocument 는 ArrayBuffer/Uint8Array 모두 허용.
+    verifyDoc = mupdf.Document.openDocument(outBytes, 'application/pdf');
+    const pageCount = verifyDoc.countPages();
+    const allLines: LineForScan[] = [];
+    for (let i = 0; i < pageCount; i += 1) {
+      const lines = extractLinesFromDoc(verifyDoc, i);
+      for (const ln of lines) allLines.push(ln);
+    }
+    postCheckLeaks = runDetectors(allLines).length;
+  } finally {
+    verifyDoc?.destroy();
+  }
+
+  return {
+    pdf: outBytes,
+    report: {
+      totalBoxes: total,
+      byCategory: counts,
+      pagesAffected,
+      postCheckLeaks,
+    },
+  };
 }
 
 /** PoC 단계에서는 미구현이지만 후속 작업용 PDFDocument 핸들 노출. */
