@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-multi
+.DS_Store
+*.log
+.env
+.vite
+coverage
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+vitest.config.d.ts
+vitest.config.js
