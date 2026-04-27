@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "lint": "tsc -b",
     "prebuild": "node scripts/embed-wasm.mjs",
+    "postbuild": "node scripts/verify-no-external.mjs",
     "prebuild:multi": "node scripts/embed-wasm.mjs",
     "predev": "node scripts/embed-wasm.mjs",
     "pretest": "node scripts/embed-wasm.mjs"
