@@ -48,4 +48,21 @@ describe('addressRule', () => {
     expect(r[0]!.matched).toBe('서울시 강남구 테헤란로 1');
     expect(r[1]!.matched).toBe('부산시 해운대구 센텀로 2');
   });
+
+  it('띄어쓰기 없이 붙어있는 주소(연속 토큰) + 콤마 + 괄호 보충정보까지 한 번에 검출한다', () => {
+    const input = '경기남양주시와부읍덕소로213 ,106-701(도곡리, 덕소강변서희스타힐스)';
+    const r = addressRule.scan(input);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.matched).toBe(input);
+  });
+
+  it('짧은 시/도 형(서울/경기 등)도 시/군/구+상세 주소가 따라붙으면 검출한다', () => {
+    const r = addressRule.scan('서울 강남구 1동');
+    expect(r).toHaveLength(1);
+    expect(r[0]!.matched).toBe('서울 강남구 1동');
+  });
+
+  it('"1번 출구" 처럼 한국어와 결합된 숫자 토큰은 false positive 가 되지 않는다', () => {
+    expect(addressRule.scan('서울시 강남구 1번 출구로 나오세요').length).toBe(0);
+  });
 });
