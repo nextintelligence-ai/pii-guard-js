@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from '@/state/store';
 import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
@@ -5,10 +6,12 @@ import { PdfCanvas } from '@/components/PdfCanvas';
 import { CandidatePanel } from '@/components/CandidatePanel';
 import { PageNavigator } from '@/components/PageNavigator';
 import { ReportModal } from '@/components/ReportModal';
+import { UsageGuideModal } from '@/components/UsageGuideModal';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAutoDetect } from '@/hooks/useAutoDetect';
 import { useApply } from '@/hooks/useApply';
 import { useKeyboard } from '@/hooks/useKeyboard';
+import { hasSeenUsageGuide, markUsageGuideSeen } from '@/utils/usageGuideStorage';
 
 export default function App() {
   useKeyboard();
@@ -16,10 +19,31 @@ export default function App() {
   const { load } = usePdfDocument();
   const { apply, download } = useApply();
   const doc = useAppStore((s) => s.doc);
+  const [usageGuideOpen, setUsageGuideOpen] = useState(false);
+  const [doNotShowUsageGuideAgain, setDoNotShowUsageGuideAgain] = useState(false);
+
+  useEffect(() => {
+    if (!hasSeenUsageGuide()) {
+      setDoNotShowUsageGuideAgain(false);
+      setUsageGuideOpen(true);
+    }
+  }, []);
+
+  const openUsageGuide = useCallback(() => {
+    setDoNotShowUsageGuideAgain(false);
+    setUsageGuideOpen(true);
+  }, []);
+
+  const closeUsageGuide = useCallback(() => {
+    if (doNotShowUsageGuideAgain) {
+      markUsageGuideSeen();
+    }
+    setUsageGuideOpen(false);
+  }, [doNotShowUsageGuideAgain]);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Toolbar onLoad={load} onApply={apply} onDownload={download} />
+      <Toolbar onLoad={load} onApply={apply} onDownload={download} onHelp={openUsageGuide} />
       <main className="flex-1 grid grid-cols-[300px_1fr] gap-2 p-3 bg-slate-100">
         <aside className="bg-white rounded shadow p-3 text-sm overflow-auto">
           {doc.kind === 'empty' && '파일을 업로드하면 후보가 표시됩니다.'}
@@ -54,6 +78,12 @@ export default function App() {
         </section>
       </main>
       <ReportModal />
+      <UsageGuideModal
+        open={usageGuideOpen}
+        doNotShowAgain={doNotShowUsageGuideAgain}
+        onDoNotShowAgainChange={setDoNotShowUsageGuideAgain}
+        onClose={closeUsageGuide}
+      />
     </div>
   );
 }

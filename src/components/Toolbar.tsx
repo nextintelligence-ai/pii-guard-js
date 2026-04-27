@@ -5,9 +5,10 @@ type Props = {
   onLoad(f: File): void;
   onApply(): void;
   onDownload(): void;
+  onHelp(): void;
 };
 
-export function Toolbar({ onLoad, onApply, onDownload }: Props) {
+export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
   return (
     <div className="flex items-center gap-2 bg-white border-b px-4 py-2">
@@ -37,6 +38,9 @@ export function Toolbar({ onLoad, onApply, onDownload }: Props) {
         onClick={() => useAppStore.getState().redo()}
       >
         Redo
+      </button>
+      <button type="button" className="px-3 py-1 rounded border" onClick={onHelp}>
+        사용법
       </button>
       <MaskStylePicker />
       <div className="flex-1" />
