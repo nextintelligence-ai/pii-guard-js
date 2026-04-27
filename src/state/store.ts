@@ -9,6 +9,7 @@ import type {
   RedactionBox,
 } from '@/types/domain';
 import { createId } from '@/utils/id';
+import { undoStack } from './undoStack';
 
 export type DocState =
   | { kind: 'empty' }
@@ -41,6 +42,8 @@ type Actions = {
   deleteBox(id: string): void;
   selectBox(id: string | null): void;
   setMaskStyle(s: MaskStyle): void;
+  undo(): void;
+  redo(): void;
   reset(): void;
 };
 
@@ -73,6 +76,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     set({ candidates: list });
   },
   addAutoBox(c) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     const id = c.id;
     set((s) => ({
       boxes: {
@@ -89,6 +93,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     }));
   },
   addManualBox(b) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     const id = createId();
     const box: RedactionBox =
       b.label !== undefined
@@ -111,6 +116,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     return id;
   },
   addTextSelectBox(b) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     const id = createId();
     set((s) => ({
       boxes: {
@@ -127,6 +133,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     return id;
   },
   toggleBox(id) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     set((s) => {
       const b = s.boxes[id];
       if (!b) return s;
@@ -134,6 +141,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     });
   },
   toggleCategory(cat) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     const next = !get().categoryEnabled[cat];
     set((s) => {
       const updated: Record<string, RedactionBox> = { ...s.boxes };
@@ -150,6 +158,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     });
   },
   updateBox(id, patch) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     set((s) => {
       const b = s.boxes[id];
       if (!b) return s;
@@ -157,6 +166,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     });
   },
   deleteBox(id) {
+    undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     set((s) => {
       const c = { ...s.boxes };
       delete c[id];
@@ -172,7 +182,22 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   setMaskStyle(m) {
     set({ maskStyle: m });
   },
+  undo() {
+    const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };
+    const prev = undoStack.popPast();
+    if (!prev) return;
+    undoStack.pushFuture(cur);
+    set(prev);
+  },
+  redo() {
+    const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };
+    const next = undoStack.popFuture();
+    if (!next) return;
+    undoStack.push(cur);
+    set(next);
+  },
   reset() {
+    undoStack.clear();
     set({ ...initial });
   },
 }));
