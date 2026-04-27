@@ -13,6 +13,7 @@ let cached: Promise<Remote<PdfWorkerApi>> | null = null;
  * 3. 워커가 'wasm-ready' string 메시지를 보낼 때까지 대기
  *    - { type: 'init-error', message } 를 받으면 reject (워커 setWasmBinary/expose 가 throw 한 경우)
  *    - 워커 'error' 이벤트는 fallback (sync exception 이 globalErrorHandler 까지 도달한 경우)
+ *    - 30초 타임아웃: 워커가 메시지를 묵살(예: 타입가드 실패)했을 때 메인 스레드 무한 대기 방지
  * 4. comlink wrap 후 캐시
  */
 export function getPdfWorker(): Promise<Remote<PdfWorkerApi>> {
@@ -23,7 +24,9 @@ export function getPdfWorker(): Promise<Remote<PdfWorkerApi>> {
     const buffer = wasmBytes.buffer;
 
     await new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
       const cleanup = (): void => {
+        if (timeoutId !== null) clearTimeout(timeoutId);
         w.removeEventListener('message', onMessage);
         w.removeEventListener('error', onError);
       };
@@ -49,6 +52,14 @@ export function getPdfWorker(): Promise<Remote<PdfWorkerApi>> {
       };
       w.addEventListener('message', onMessage);
       w.addEventListener('error', onError);
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(
+          new Error(
+            'pdf.worker init 응답 없음 (30s 타임아웃) — 워커 환경/모듈 로딩을 확인하세요.',
+          ),
+        );
+      }, 30_000);
       // ArrayBuffer 를 transferable 로 보내면 메인 측 wasmBytes 의 underlying buffer 가 detach
       // 되어 즉시 GC 후보가 된다. 캐시할 필요가 없으므로 의도된 동작.
       w.postMessage({ type: 'init-wasm', buffer }, [buffer]);
@@ -56,5 +67,10 @@ export function getPdfWorker(): Promise<Remote<PdfWorkerApi>> {
 
     return wrap<PdfWorkerApi>(w);
   })();
+  // init 실패 시 cached 를 null 로 리셋해 다음 호출이 새로 시도하도록 한다.
+  // 현재 호출자에게는 원래의 rejection 이 그대로 전달된다 (cached 자체는 변경 안 함).
+  cached.catch(() => {
+    cached = null;
+  });
   return cached;
 }
