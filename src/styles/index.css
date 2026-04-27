@@ -1,1 +1,5 @@
-/* placeholder — Tailwind 디렉티브는 Task 0.2 에서 추가됨 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
