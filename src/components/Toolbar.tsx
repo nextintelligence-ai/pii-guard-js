@@ -1,4 +1,14 @@
+import { useRef } from 'react';
+import { Upload, Undo2, Redo2, HelpCircle, Shield, Download } from 'lucide-react';
 import { useAppStore } from '@/state/store';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { MaskStylePicker } from './MaskStylePicker';
 
 type Props = {
@@ -10,11 +20,13 @@ type Props = {
 
 export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   return (
-    <div className="flex items-center gap-2 bg-white border-b px-4 py-2">
-      <label className="px-3 py-1 rounded bg-slate-900 text-white cursor-pointer">
-        업로드
+    <TooltipProvider delayDuration={200}>
+      <div className="flex items-center gap-2 border-b bg-background px-4 py-2 shadow-sm">
         <input
+          ref={inputRef}
           type="file"
           accept="application/pdf"
           hidden
@@ -24,42 +36,70 @@ export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
             e.target.value = '';
           }}
         />
-      </label>
-      <button
-        type="button"
-        className="px-3 py-1 rounded border"
-        onClick={() => useAppStore.getState().undo()}
-      >
-        Undo
-      </button>
-      <button
-        type="button"
-        className="px-3 py-1 rounded border"
-        onClick={() => useAppStore.getState().redo()}
-      >
-        Redo
-      </button>
-      <button type="button" className="px-3 py-1 rounded border" onClick={onHelp}>
-        사용법
-      </button>
-      <MaskStylePicker />
-      <div className="flex-1" />
-      <button
-        type="button"
-        className="px-3 py-1 rounded bg-red-600 text-white disabled:opacity-50"
-        onClick={onApply}
-        disabled={docKind !== 'ready'}
-      >
-        익명화 적용
-      </button>
-      <button
-        type="button"
-        className="px-3 py-1 rounded bg-slate-700 text-white disabled:opacity-50"
-        onClick={onDownload}
-        disabled={docKind !== 'done'}
-      >
-        다운로드
-      </button>
-    </div>
+        <Button size="sm" onClick={() => inputRef.current?.click()}>
+          <Upload />
+          업로드
+        </Button>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => useAppStore.getState().undo()}
+              aria-label="되돌리기"
+            >
+              <Undo2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>되돌리기 (⌘Z)</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => useAppStore.getState().redo()}
+              aria-label="다시 실행"
+            >
+              <Redo2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>다시 실행 (⇧⌘Z)</TooltipContent>
+        </Tooltip>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <MaskStylePicker />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="icon" variant="ghost" onClick={onHelp} aria-label="사용법">
+              <HelpCircle />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>사용법 안내</TooltipContent>
+        </Tooltip>
+
+        <div className="flex-1" />
+
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={onApply}
+          disabled={docKind !== 'ready'}
+        >
+          <Shield />
+          익명화 적용
+        </Button>
+        <Button size="sm" onClick={onDownload} disabled={docKind !== 'done'}>
+          <Download />
+          다운로드
+        </Button>
+      </div>
+    </TooltipProvider>
   );
 }
