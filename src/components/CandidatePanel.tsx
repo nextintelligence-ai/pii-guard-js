@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '@/state/store';
 import type { DetectionCategory, RedactionBox } from '@/types/domain';
 
@@ -13,10 +14,12 @@ const LABELS: Record<DetectionCategory, string> = {
 const CATS: DetectionCategory[] = ['rrn', 'phone', 'email', 'account', 'businessNo', 'card'];
 
 export function CandidatePanel() {
-  const boxes = useAppStore((s) =>
-    Object.values(s.boxes).filter(
-      (b): b is RedactionBox & { category: DetectionCategory } =>
-        b.source === 'auto' && b.category !== undefined,
+  const boxes = useAppStore(
+    useShallow((s) =>
+      Object.values(s.boxes).filter(
+        (b): b is RedactionBox & { category: DetectionCategory } =>
+          b.source === 'auto' && b.category !== undefined,
+      ),
     ),
   );
   const cats = useAppStore((s) => s.categoryEnabled);
