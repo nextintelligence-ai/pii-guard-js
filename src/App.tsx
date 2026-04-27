@@ -3,6 +3,7 @@ import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
 import { PdfCanvas } from '@/components/PdfCanvas';
 import { CandidatePanel } from '@/components/CandidatePanel';
+import { PageNavigator } from '@/components/PageNavigator';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAutoDetect } from '@/hooks/useAutoDetect';
 
@@ -36,13 +37,16 @@ export default function App() {
           )}
           {doc.kind === 'error' && <span className="text-red-600">에러: {doc.message}</span>}
         </aside>
-        <section className="bg-white rounded shadow p-3 flex items-center justify-center">
+        <section className="bg-white rounded shadow p-3 flex flex-col items-center justify-center overflow-auto">
           {doc.kind === 'empty' || doc.kind === 'loading' ? (
             <DropZone onFile={load} />
           ) : doc.kind === 'ready' ? (
-            <div className="overflow-auto max-h-[calc(100vh-100px)]">
-              <PdfCanvas />
-            </div>
+            <>
+              <div className="overflow-auto max-h-[calc(100vh-180px)]">
+                <PdfCanvas />
+              </div>
+              <PageNavigator />
+            </>
           ) : (
             <div className="text-slate-500">상태: {doc.kind}</div>
           )}
