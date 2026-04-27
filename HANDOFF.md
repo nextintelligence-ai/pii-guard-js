@@ -20,7 +20,7 @@ LOFA(손해사정 보고서) 시나리오의 PDF 안에 들어 있는 PII(주민
 
 ## Current Progress
 
-### 완료된 마일스톤 (M0~M7) — 33 commits, 32 tests
+### 완료된 마일스톤 (M0~M7 + 빌드 사이즈 + shadcn UI) — 46 commits, 41 tests
 
 | | 내용 | 핵심 산출물 |
 |---|---|---|
@@ -32,14 +32,16 @@ LOFA(손해사정 보고서) 시나리오의 PDF 안에 들어 있는 PII(주민
 | **M5** | redactor + 메타데이터 정리 + postCheck + 다운로드 + 리포트 | `src/core/redactor.ts`, `src/hooks/useApply.ts`, `src/components/ReportModal.tsx` |
 | **M6** | 마스킹 스타일, 큰 파일 경고, 암호화 PDF 프롬프트 | `src/components/MaskStylePicker.tsx`, `src/hooks/usePdfDocument.ts` 보강 |
 | **M7** | 외부 URL 검증, 통합 테스트, 릴리스 체크리스트 | `scripts/verify-no-external.mjs`, `tests/integration/redact.test.ts`, `docs/release-checklist.md` |
+| **빌드 사이즈** | 단일 HTML 35.9MB → 13MB (transferable WASM, asset emit 차단) | `vite.config.ts`, `scripts/verify-build-size.mjs`, `docs/superpowers/plans/2026-04-27-build-size-optimization.md` |
+| **shadcn UI** | 디자인 시스템 토큰화, 16 ui primitive, 7 컴포넌트 재구성, Sonner 토스트, CandidatePanel 그룹화 | `src/components/ui/*`, `src/lib/utils.ts`, `tailwind.config.js`, `docs/superpowers/{specs,plans}/2026-04-27-shadcn-*.md` |
 
 ### 검증 상태
 
 ```
 ✓ npm test         → 41/41 passing (단위 39 + 통합 2)
 ✓ npm run lint     → tsc -b clean
-✓ npm run build    → dist/index.html 13.1MB (이전 35.9MB → 62% 감소)
-✓ postbuild check  → 외부 URL 0개 + 18MB 사이즈 예산 가드
+✓ npm run build    → dist/index.html 13.25MB (이전 35.9MB → 63% 감소, shadcn 추가 +0.19MB)
+✓ postbuild check  → 외부 URL 0개 + 18MB 사이즈 예산 가드 (여유 4.75MB)
 ✓ 통합 redact 테스트 → postCheckLeaks === 0
 ```
 
@@ -82,6 +84,13 @@ npm run lint             # 타입 체크
 - 픽스처 PDF는 `pdf-lib`로 자동 생성 (`scripts/make-test-fixture.mjs`)
 - Node `Buffer.buffer`는 cross-realm 이슈가 있어 `new Uint8Array(...).buffer` 로 새로 만들어 mupdf에 전달
 
+### shadcn 마이그레이션 (2026-04-27)
+- **`file://` 호환성**: Radix Primitives 는 모두 React.createPortal + 표준 DOM API 만 사용 → fetch/Service Worker 없음 → 단일 HTML + file:// 환경 그대로 동작 (별도 우회 불필요)
+- **사이즈 영향 사전 추정 정확**: 리서치 단계의 +50~120KB gzip 추정 → 실측 +0.19MB raw / 약 +60KB gzip 으로 예측 적중
+- **Phase 0~4 일괄 진행**: deps → tokens/css 변수 → primitive 16종 → 컴포넌트 교체 → modal/toast. 각 Phase 마다 `npm test && npm run lint && npm run build` 통과 강제 → 회귀 0
+- **CandidatePanel 그룹화**: 카테고리 안에서 페이지별 Map 그룹 + Collapsible. 항목 30개 이하면 자동 펼침, 초과 시 접힘 기본
+- **Sonner 토스트 일원화**: `toast.loading({ id: 'apply' })` → 같은 id 로 success/warning/error 갱신 → 중복 알림 없이 상태 전이만 표시
+
 ---
 
 ## What Didn't Work
@@ -92,11 +101,13 @@ npm run lint             # 타입 체크
 3. **mupdf의 `setOverlayText`**: 존재하지 않음 → `setContents(text)`로 대체
 4. **`tsc -b --noEmit`** lint 스크립트: composite project ref가 emit하면서 TS6310 충돌 → `tsc -b`로 단순화 (`tsconfig.json`이 이미 `noEmit: true`)
 5. **`undoStack.push(cur)`** in `redo()` (플랜 초안): future stack을 클리어해서 연속 redo 불가 → `pushPast(cur)` 추가로 수정
+6. **shadcn 컴포넌트에 `: JSX.Element` 명시 반환 타입** (플랜 초안): React 19 + `jsx: "react-jsx"` 환경에서 `JSX` 가 글로벌 네임스페이스에서 빠짐 → `TS2503: Cannot find namespace 'JSX'`. 명시 반환 타입을 제거하고 추론에 맡김 (기존 코드 컨벤션과 동일)
+7. **postbuild verify-no-external 가 Radix 의 a11y 경고 URL 차단**: Dialog 가 `console.error("…see https://radix-ui.com/primitives/docs/components/dialog")` 로 dev 안내 — 실제 fetch 아님. React `react.dev/errors/` 가 이미 allow list 에 있는 것과 동일 패턴이라 `https://radix-ui.com/primitives/` 도 추가
 
 ### 알려진 이슈 / 한계
 - ~~**빌드 산출물 35.9MB**~~ → **해결됨 (2026-04-27, 13.1MB)**: WASM 을 메인 스레드에서 1회 디코드 → `postMessage(buf, [buf])` transferable 로 워커에 zero-copy 이관. 워커는 `init-wasm` 핸드셰이크 후에만 comlink expose. Vite 의 `mupdf-wasm.js` `new URL(...)` 자산 emit 도 `stripMupdfWasmAsset` 플러그인으로 차단. `scripts/verify-build-size.mjs` 가 18MB 예산을 postbuild 에 강제. 자세한 설계는 `docs/superpowers/plans/2026-04-27-build-size-optimization.md`.
-- **`docs/poc-report.md`**의 사용자 수동 검증 항목이 미완료: `file://` 더블클릭 → Chrome/Edge/Firefox 동작 검증
-- **CandidatePanel**이 페이지 그룹화 없이 전체 후보를 카테고리별로 펼침: 페이지 많은 PDF에서 길어짐. UX 개선 여지
+- **`docs/poc-report.md`**의 사용자 수동 검증 항목이 미완료: `file://` 더블클릭 → Chrome/Edge/Firefox 동작 검증 (shadcn 마이그레이션 후 재검증 필요)
+- ~~**CandidatePanel**이 페이지 그룹화 없이 전체 후보를 카테고리별로 펼침~~ → **해결됨 (shadcn Phase 3)**: 카테고리 안에서 페이지별 그룹화 + Collapsible. 30개 초과 시 자동 접힘
 
 ### 손대지 않은 의도된 비범위 (MVP 제외)
 - OCR (스캔본 텍스트화) — `TextExtractor` 인터페이스가 확장 가능하도록만 설계
@@ -113,7 +124,9 @@ npm run lint             # 타입 체크
    - [ ] Chrome (Windows / macOS)
    - [ ] Edge (Windows)
    - [ ] Firefox
-   - 검증 항목: 워커 ping 응답, PDF 업로드 → 캔버스 렌더, 자동 탐지 → 적용 → 다운로드, 결과 PDF 메타데이터 비어있음, DevTools 콘솔 에러 없음
+   - PDF 처리 검증: 워커 ping 응답, PDF 업로드 → 캔버스 렌더, 자동 탐지 → 적용 → 다운로드, 결과 PDF 메타데이터 비어있음
+   - **shadcn UI 검증** (신규): 첫 방문 시 UsageGuideModal 자동 표시, Toolbar Tooltip hover, MaskStylePicker Select 열기/선택, CandidatePanel Collapsible 펼침/접힘, ReportModal ESC/X 닫기, Sonner 토스트 표시
+   - DevTools 콘솔 에러 0
 2. 검증 결과를 `docs/poc-report.md`에 기록
 
 ### ~~우선순위 1 — 빌드 사이즈 최적화~~ → **완료 (2026-04-27)**
@@ -152,6 +165,9 @@ shadcn/ui 마이그레이션 (Phase 0~4) 완료:
 ### 산출 문서
 - `docs/superpowers/specs/2026-04-27-pdf-anonymization-design.md` — 설계 스펙
 - `docs/superpowers/plans/2026-04-27-pdf-anonymization.md` — 구현 계획 (M0~M7 태스크별)
+- `docs/superpowers/plans/2026-04-27-build-size-optimization.md` — 35.9MB → 13MB 사이즈 최적화 설계
+- `docs/superpowers/specs/2026-04-27-shadcn-migration-research.md` — shadcn 호환성/사이즈 리서치
+- `docs/superpowers/plans/2026-04-27-shadcn-migration.md` — shadcn Phase 0~4 구현 플랜 (실행 완료)
 - `docs/poc-report.md` — PoC 결과 + mupdf 1.27 발견사항
 - `docs/release-checklist.md` — 릴리스 전 검증 항목
 
@@ -161,7 +177,9 @@ shadcn/ui 마이그레이션 (Phase 0~4) 완료:
 - `src/core/detectors/index.ts` + `*.ts` — 6 detector + runDetectors
 - `src/workers/pdf.worker.ts` — comlink로 노출되는 워커 API
 - `src/state/store.ts` — Zustand 단일 스토어 + undo/redo
-- `src/components/BoxOverlay.tsx` — 가장 복잡한 UI (drag-create / select / move / resize / shift+drag text-select)
+- `src/components/BoxOverlay.tsx` — 가장 복잡한 UI (drag-create / select / move / resize / shift+drag text-select). **shadcn 마이그레이션 미적용 (SVG 좌표 로직만 사용)**
+- `src/components/ui/*.tsx` — shadcn primitive 16종 (Button/Card/Badge/Alert/Separator/Label/Input/Tooltip/Checkbox/Select/Dialog/ScrollArea/Collapsible/Progress/Sonner)
+- `src/lib/utils.ts` — `cn()` 헬퍼 (clsx + tailwind-merge)
 
 ### 빌드/배포
 - `vite.config.ts` — singlefile + worker.format='es' + assetsInlineLimit=100M
