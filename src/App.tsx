@@ -1,25 +1,38 @@
-import { useCallback, useState } from 'react';
+import { useAppStore } from '@/state/store';
+import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
+import { usePdfDocument } from '@/hooks/usePdfDocument';
 
 export default function App() {
-  const [picked, setPicked] = useState<string>('');
-
-  const handleFile = useCallback((f: File) => {
-    setPicked(`${f.name} (${f.size} bytes)`);
-  }, []);
+  const { load } = usePdfDocument();
+  const doc = useAppStore((s) => s.doc);
 
   return (
-    <main className="min-h-screen p-6 text-slate-700">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold">PDF 익명화 도구</h1>
-        <p className="mt-1 text-sm text-slate-500">M2: 셸 구축 중</p>
-      </header>
-
-      <section className="rounded-lg border border-slate-300 bg-white p-4">
-        <h2 className="mb-2 font-semibold">파일 선택</h2>
-        <DropZone onFile={handleFile} />
-        {picked && <p className="mt-3 text-sm">선택된 파일: {picked}</p>}
-      </section>
-    </main>
+    <div className="min-h-screen flex flex-col">
+      <Toolbar
+        onLoad={load}
+        onApply={() => {
+          /* M5 */
+        }}
+        onDownload={() => {
+          /* M5 */
+        }}
+      />
+      <main className="flex-1 grid grid-cols-[300px_1fr] gap-2 p-3 bg-slate-100">
+        <aside className="bg-white rounded shadow p-3 text-sm">
+          {doc.kind === 'empty' && '파일을 업로드하면 후보가 표시됩니다.'}
+          {doc.kind === 'loading' && '문서를 여는 중…'}
+          {doc.kind === 'ready' && `파일: ${doc.fileName} · ${doc.pages.length}페이지`}
+          {doc.kind === 'error' && <span className="text-red-600">에러: {doc.message}</span>}
+        </aside>
+        <section className="bg-white rounded shadow p-3 flex items-center justify-center">
+          {doc.kind === 'empty' || doc.kind === 'loading' ? (
+            <DropZone onFile={load} />
+          ) : (
+            <div>페이지 캔버스 자리 (Task 2.5에서 구현)</div>
+          )}
+        </section>
+      </main>
+    </div>
   );
 }
