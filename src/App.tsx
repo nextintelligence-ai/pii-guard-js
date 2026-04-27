@@ -2,6 +2,7 @@ import { useAppStore } from '@/state/store';
 import { Toolbar } from '@/components/Toolbar';
 import { DropZone } from '@/components/DropZone';
 import { PdfCanvas } from '@/components/PdfCanvas';
+import { CandidatePanel } from '@/components/CandidatePanel';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAutoDetect } from '@/hooks/useAutoDetect';
 
@@ -22,10 +23,17 @@ export default function App() {
         }}
       />
       <main className="flex-1 grid grid-cols-[300px_1fr] gap-2 p-3 bg-slate-100">
-        <aside className="bg-white rounded shadow p-3 text-sm">
+        <aside className="bg-white rounded shadow p-3 text-sm overflow-auto">
           {doc.kind === 'empty' && '파일을 업로드하면 후보가 표시됩니다.'}
           {doc.kind === 'loading' && '문서를 여는 중…'}
-          {doc.kind === 'ready' && `파일: ${doc.fileName} · ${doc.pages.length}페이지`}
+          {doc.kind === 'ready' && (
+            <>
+              <div className="mb-3 pb-3 border-b text-xs text-slate-500">
+                {doc.fileName} · {doc.pages.length}페이지
+              </div>
+              <CandidatePanel />
+            </>
+          )}
           {doc.kind === 'error' && <span className="text-red-600">에러: {doc.message}</span>}
         </aside>
         <section className="bg-white rounded shadow p-3 flex items-center justify-center">
