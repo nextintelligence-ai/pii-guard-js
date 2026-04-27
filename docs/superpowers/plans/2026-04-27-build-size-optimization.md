@@ -703,3 +703,23 @@ git commit -m "docs: 빌드 사이즈 최적화 후 수동 스모크 기록"
 - 워커가 `init-wasm` 외 메시지를 받으면 무시된다 — 이 경우 메시지가 사라지지만, 메인은 `wasm-ready` 가 올 때까지 comlink wrap 을 미루므로 RPC 메시지가 워커로 빠지는 일은 발생하지 않는다.
 - transferable 후 main 의 `wasmBytes.buffer` 는 detach 되므로 재사용 금지 (Task 6 주석 참조).
 - `vi.resetModules()` 로 매 단위 테스트마다 모듈 상태 리셋 필요 (Task 1).
+
+---
+
+## 빌드 측정 후 발견한 추가 작업 (Group D-extra)
+
+Group A-C 만으로는 ~30MB 에서 멈췄다. 원인은 `node_modules/mupdf/dist/mupdf-wasm.js` 의
+
+```js
+new URL("mupdf-wasm.wasm", import.meta.url).href
+```
+
+패턴이 Vite asset plugin 의 정적 분석에 잡혀 WASM 을 별도 자산으로 emit 시키는 것. 단일 HTML
+모드에서 이 자산이 다시 base64 dataURL 로 inline 되면서 워커 번들 안에 13MB 가 더 들어간다.
+
+**해결**: `vite.config.ts` 에 `stripMupdfWasmAsset()` 플러그인 추가 — 위 리터럴을 `""` 로 치환해
+Vite 가 자산을 emit 하지 않게 한다. 런타임은 항상 `globalThis.$libmupdf_wasm_Module.wasmBinary`
+주입을 사용하므로 URL 은 절대 fetch 되지 않는다. 패턴이 mupdf 업그레이드로 사라지면 빌드가
+실패해 회귀가 명시된다.
+
+**측정**: 단일 HTML 30MB → ~14MB.

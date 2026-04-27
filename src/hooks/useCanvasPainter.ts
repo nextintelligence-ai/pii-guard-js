@@ -15,7 +15,8 @@ export function useCanvasPainter(canvas: HTMLCanvasElement | null) {
     if (!canvas || doc.kind !== 'ready') return;
     const job = ++lastJob.current;
     void (async () => {
-      const r = await getPdfWorker().renderPage(page, scale);
+      const api = await getPdfWorker();
+      const r = await api.renderPage(page, scale);
       if (job !== lastJob.current) {
         r.bitmap.close();
         return;

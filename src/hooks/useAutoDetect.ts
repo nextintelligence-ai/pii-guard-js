@@ -11,7 +11,8 @@ export function useAutoDetect() {
     if (doc.kind !== 'ready') return;
     let cancelled = false;
     void (async () => {
-      const candidates = await getPdfWorker().detectAll(page);
+      const api = await getPdfWorker();
+      const candidates = await api.detectAll(page);
       if (cancelled) return;
       const s = useAppStore.getState();
       const remaining: Record<string, RedactionBox> = {};
