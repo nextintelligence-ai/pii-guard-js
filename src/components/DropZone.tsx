@@ -1,4 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
+import { FileText, Upload } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type Props = { onFile(file: File): void };
 
@@ -24,11 +26,23 @@ export function DropZone({ onFile }: Props) {
       }}
       onDragLeave={() => setDrag(false)}
       onDrop={onDrop}
-      className={`border-2 border-dashed rounded p-12 text-center cursor-pointer transition
-        ${drag ? 'border-slate-900 bg-slate-50' : 'border-slate-300 bg-white'}`}
       onClick={() => inputRef.current?.click()}
+      className={cn(
+        'flex w-full max-w-md cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed p-12 text-center transition-colors',
+        drag
+          ? 'border-primary bg-primary/5'
+          : 'border-muted-foreground/30 bg-background hover:border-primary/50 hover:bg-accent/30',
+      )}
     >
-      <p className="text-slate-600">PDF 파일을 여기에 드롭하거나 클릭해서 선택하세요</p>
+      {drag ? (
+        <Upload className="h-10 w-10 text-primary" />
+      ) : (
+        <FileText className="h-10 w-10 text-muted-foreground" />
+      )}
+      <div>
+        <p className="font-medium text-foreground">PDF 파일을 여기에 드롭하세요</p>
+        <p className="mt-1 text-sm text-muted-foreground">또는 클릭해서 선택</p>
+      </div>
       <input
         ref={inputRef}
         type="file"
