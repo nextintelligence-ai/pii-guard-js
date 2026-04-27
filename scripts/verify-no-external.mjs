@@ -5,6 +5,8 @@ const f = await readFile('dist/index.html', 'utf8');
 // XMLNS / XHTML / SVG / MathML namespaces 는 inline SVG/XML spec URI 로 네트워크 호출이 아니다.
 // React production runtime 에 minified 로 박혀있는 react.dev/errors/ 도 string concat 일 뿐
 // 실제 fetch 가 아니므로 allow list 에 둔다.
+// Radix Primitives 의 a11y 경고 메시지(예: Dialog 가 Title 없을 때 console.error 로
+// `radix-ui.com/primitives/docs/components/dialog` 를 안내) 도 fetch 가 아닌 string 이다.
 const allowList = [
   'http://www.w3.org/2000/svg',
   'http://www.w3.org/1999/xhtml',
@@ -12,6 +14,7 @@ const allowList = [
   'http://www.w3.org/1999/xlink',
   'http://www.w3.org/1998/Math/MathML',
   'https://react.dev/errors/',
+  'https://radix-ui.com/primitives/',
 ];
 
 const matches = [...f.matchAll(/https?:\/\/[^"'\s)>]+/g)]
