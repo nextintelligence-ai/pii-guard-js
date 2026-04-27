@@ -1,8 +1,9 @@
 import type { Candidate } from '@/types/domain';
 import { createId } from '@/utils/id';
+import { emailRule } from './email';
 import type { DetectorRule, LineForScan } from './types';
 
-export const ALL_RULES: DetectorRule[] = [];
+export const ALL_RULES: DetectorRule[] = [emailRule];
 
 export function runDetectors(
   lines: LineForScan[],
