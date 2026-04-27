@@ -4,27 +4,22 @@ import { DropZone } from '@/components/DropZone';
 import { PdfCanvas } from '@/components/PdfCanvas';
 import { CandidatePanel } from '@/components/CandidatePanel';
 import { PageNavigator } from '@/components/PageNavigator';
+import { ReportModal } from '@/components/ReportModal';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAutoDetect } from '@/hooks/useAutoDetect';
+import { useApply } from '@/hooks/useApply';
 import { useKeyboard } from '@/hooks/useKeyboard';
 
 export default function App() {
   useKeyboard();
   useAutoDetect();
   const { load } = usePdfDocument();
+  const { apply, download } = useApply();
   const doc = useAppStore((s) => s.doc);
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Toolbar
-        onLoad={load}
-        onApply={() => {
-          /* M5 */
-        }}
-        onDownload={() => {
-          /* M5 */
-        }}
-      />
+      <Toolbar onLoad={load} onApply={apply} onDownload={download} />
       <main className="flex-1 grid grid-cols-[300px_1fr] gap-2 p-3 bg-slate-100">
         <aside className="bg-white rounded shadow p-3 text-sm overflow-auto">
           {doc.kind === 'empty' && '파일을 업로드하면 후보가 표시됩니다.'}
@@ -36,6 +31,10 @@ export default function App() {
               </div>
               <CandidatePanel />
             </>
+          )}
+          {doc.kind === 'applying' && '익명화 적용 중…'}
+          {doc.kind === 'done' && (
+            <span className="text-green-700">완료. 다운로드 버튼을 눌러 저장하세요.</span>
           )}
           {doc.kind === 'error' && <span className="text-red-600">에러: {doc.message}</span>}
         </aside>
@@ -54,6 +53,7 @@ export default function App() {
           )}
         </section>
       </main>
+      <ReportModal />
     </div>
   );
 }
