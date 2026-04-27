@@ -6,8 +6,10 @@ import { CandidatePanel } from '@/components/CandidatePanel';
 import { PageNavigator } from '@/components/PageNavigator';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAutoDetect } from '@/hooks/useAutoDetect';
+import { useKeyboard } from '@/hooks/useKeyboard';
 
 export default function App() {
+  useKeyboard();
   useAutoDetect();
   const { load } = usePdfDocument();
   const doc = useAppStore((s) => s.doc);
