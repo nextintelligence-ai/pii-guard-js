@@ -27,10 +27,12 @@ type State = {
   selectedBoxId: string | null;
   maskStyle: MaskStyle;
   categoryEnabled: Record<DetectionCategory, boolean>;
+  reportDismissed: boolean;
 };
 
 type Actions = {
   setDoc(d: DocState): void;
+  dismissReport(): void;
   goToPage(i: number): void;
   setCandidates(list: Candidate[]): void;
   addAutoBox(c: Candidate): void;
@@ -62,12 +64,22 @@ const initial: State = {
     businessNo: true,
     card: true,
   },
+  reportDismissed: false,
 };
 
 export const useAppStore = create<State & Actions>((set, get) => ({
   ...initial,
   setDoc(d) {
-    set({ doc: d });
+    // 새 done 상태로 전환할 때마다 모달 dismiss 플래그를 초기화한다.
+    // 그 외 상태(empty/loading/ready/applying/error)는 reportDismissed 를 그대로 둔다.
+    if (d.kind === 'done') {
+      set({ doc: d, reportDismissed: false });
+    } else {
+      set({ doc: d });
+    }
+  },
+  dismissReport() {
+    set({ reportDismissed: true });
   },
   goToPage(i) {
     set({ currentPage: i });

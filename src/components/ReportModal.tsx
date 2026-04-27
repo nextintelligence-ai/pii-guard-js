@@ -1,11 +1,15 @@
 import { useAppStore } from '@/state/store';
+import { useApply } from '@/hooks/useApply';
 
 export function ReportModal() {
   const doc = useAppStore((s) => s.doc);
-  if (doc.kind !== 'done') return null;
+  const dismissed = useAppStore((s) => s.reportDismissed);
+  const { download } = useApply();
+  if (doc.kind !== 'done' || dismissed) return null;
   const r = doc.report;
   const close = (): void => {
-    useAppStore.getState().setDoc({ kind: 'empty' });
+    // 결과 blob/리포트는 유지한 채 모달만 숨겨 다운로드 버튼이 계속 활성 상태가 되도록 한다.
+    useAppStore.getState().dismissReport();
   };
   const categoryLine =
     Object.entries(r.byCategory)
@@ -29,6 +33,13 @@ export function ReportModal() {
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className="px-3 py-1 border rounded" onClick={close}>
             닫기
+          </button>
+          <button
+            type="button"
+            className="px-3 py-1 rounded bg-slate-700 text-white"
+            onClick={download}
+          >
+            다운로드
           </button>
         </div>
       </div>
