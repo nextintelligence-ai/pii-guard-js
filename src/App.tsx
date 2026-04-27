@@ -61,13 +61,16 @@ export default function App() {
         onHelp={openUsageGuide}
       />
       <main className="flex-1 grid grid-cols-[320px_1fr] gap-3 p-3">
-        <Card className="flex flex-col overflow-hidden">
+        <Card className="flex flex-col overflow-hidden p-1 pt-3">
           {doc.kind === "ready" ? (
             <ScrollArea className="flex-1">
               <div className="p-3">
                 <div className="mb-3 flex items-center gap-2 border-b pb-3 text-xs">
                   <Badge variant="outline">{doc.fileName}</Badge>
-                  <span className="text-muted-foreground">
+                  <span
+                    className="whitespace-nowrap text-muted-foreground"
+                    style={{ minWidth: "fit-content" }}
+                  >
                     {doc.pages.length}페이지
                   </span>
                 </div>
