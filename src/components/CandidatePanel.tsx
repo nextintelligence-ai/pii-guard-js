@@ -48,9 +48,18 @@ export function CandidatePanel() {
   const toggleCat = useAppStore((s) => s.toggleCategory);
   const goToPage = useAppStore((s) => s.goToPage);
 
+  const totalCount = boxes.length;
+
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-semibold">자동 탐지 결과</h2>
+      <div className="space-y-0.5">
+        <h2 className="text-sm font-semibold">자동으로 찾은 개인정보</h2>
+        <p className="text-xs text-muted-foreground">
+          {totalCount > 0
+            ? `${totalCount}개를 찾았어요. 가릴 항목만 체크해 주세요`
+            : '발견된 개인정보가 없어요. 필요하면 PDF에서 직접 박스를 그려도 돼요'}
+        </p>
+      </div>
       {CATS.map((cat) => {
         const items = boxes.filter((b) => b.category === cat);
         return (
