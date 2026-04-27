@@ -260,6 +260,71 @@ export async function extractSpans(pageIndex: number): Promise<TextSpan[]> {
   }
 }
 
+/**
+ * 라인 단위 텍스트 + 글자 bbox 추출.
+ *
+ * 각 `onChar` 콜백의 `quad`(8개 좌표: 4개 코너) 에서 axis-aligned bbox 를 계산해
+ * `charBboxes` 에 누적한다. surrogate pair 는 JS string 으로 전달되며 `text` 길이와
+ * `charBboxes` 길이를 일치시키기 위해 char 단위 push 를 그대로 사용한다.
+ */
+export async function extractLines(
+  pageIndex: number,
+): Promise<{ pageIndex: number; text: string; charBboxes: Bbox[] }[]> {
+  await ensureMupdfReady();
+  const doc = requireDoc();
+  const page = doc.loadPage(pageIndex);
+  let stext: MupdfNS.StructuredText | null = null;
+  try {
+    stext = page.toStructuredText();
+    const lines: { pageIndex: number; text: string; charBboxes: Bbox[] }[] = [];
+    let currentText = '';
+    let currentBboxes: Bbox[] = [];
+    let inLine = false;
+    stext.walk({
+      beginLine: () => {
+        currentText = '';
+        currentBboxes = [];
+        inLine = true;
+      },
+      onChar: (c, _origin, _font, _size, quad) => {
+        if (!inLine) return;
+        // quad: ul-x, ul-y, ur-x, ur-y, ll-x, ll-y, lr-x, lr-y
+        const xs = [quad[0], quad[2], quad[4], quad[6]];
+        const ys = [quad[1], quad[3], quad[5], quad[7]];
+        const bbox: Bbox = [
+          Math.min(...xs),
+          Math.min(...ys),
+          Math.max(...xs),
+          Math.max(...ys),
+        ];
+        // c 는 한 글자(또는 surrogate pair) 문자열. 정규식은 JS string index 기반(UTF-16
+        // code unit)으로 동작하므로, charBboxes 길이를 string.length 와 맞추기 위해
+        // 각 code unit 마다 동일 bbox 를 push 한다.
+        for (let i = 0; i < c.length; i += 1) {
+          currentText += c[i];
+          currentBboxes.push(bbox);
+        }
+      },
+      endLine: () => {
+        if (currentText.length > 0 && currentBboxes.length === currentText.length) {
+          lines.push({
+            pageIndex,
+            text: currentText,
+            charBboxes: currentBboxes,
+          });
+        }
+        currentText = '';
+        currentBboxes = [];
+        inLine = false;
+      },
+    });
+    return lines;
+  } finally {
+    stext?.destroy();
+    page.destroy();
+  }
+}
+
 /** PoC 단계에서는 미구현이지만 후속 작업용 PDFDocument 핸들 노출. */
 export function getPdfDocument(): MupdfNS.PDFDocument | null {
   return currentPdf;

@@ -1,7 +1,9 @@
 import { expose, transfer } from 'comlink';
+import { runDetectors } from '@/core/detectors';
 import {
   closeDocument,
   ensureMupdfReady,
+  extractLines,
   extractSpans,
   openDocument,
   renderPage,
@@ -24,6 +26,10 @@ const api: Partial<PdfWorkerApi> = {
   },
   async extractSpans(pageIndex) {
     return extractSpans(pageIndex);
+  },
+  async detectAll(pageIndex) {
+    const lines = await extractLines(pageIndex);
+    return runDetectors(lines);
   },
   async close() {
     closeDocument();
