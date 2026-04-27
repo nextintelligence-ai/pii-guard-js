@@ -7,12 +7,15 @@ import {
   ensureMupdfReady,
   extractLines,
   openDocument,
+  setWasmBinary,
 } from '@/core/mupdfBridge';
+import { decodeMupdfWasm } from '@/wasm/decodeMupdfWasm';
 import { runDetectors } from '@/core/detectors';
 import type { RedactionBox } from '@/types/domain';
 
 describe('통합: 디지털 PDF 익명화', () => {
   beforeAll(async () => {
+    setWasmBinary(decodeMupdfWasm());
     await ensureMupdfReady();
   });
 
