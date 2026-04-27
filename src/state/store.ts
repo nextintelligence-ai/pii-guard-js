@@ -193,7 +193,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };
     const next = undoStack.popFuture();
     if (!next) return;
-    undoStack.push(cur);
+    undoStack.pushPast(cur);
     set(next);
   },
   reset() {

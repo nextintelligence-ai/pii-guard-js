@@ -12,6 +12,10 @@ export const undoStack = {
     if (past.length > LIMIT) past.shift();
     future.length = 0;
   },
+  pushPast(s: Snap) {
+    past.push(structuredClone(s));
+    if (past.length > LIMIT) past.shift();
+  },
   popPast(): Snap | null {
     return past.pop() ?? null;
   },
