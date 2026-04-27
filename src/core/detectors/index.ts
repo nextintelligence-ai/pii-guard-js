@@ -1,5 +1,6 @@
 import type { Candidate } from '@/types/domain';
 import { createId } from '@/utils/id';
+import { accountRule } from './account';
 import { businessNoRule } from './businessNo';
 import { cardRule } from './card';
 import { emailRule } from './email';
@@ -13,6 +14,7 @@ export const ALL_RULES: DetectorRule[] = [
   rrnRule,
   cardRule,
   businessNoRule,
+  accountRule,
 ];
 
 export function runDetectors(
