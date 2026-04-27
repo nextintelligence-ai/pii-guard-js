@@ -1,11 +1,12 @@
 import type { Candidate } from '@/types/domain';
 import { createId } from '@/utils/id';
+import { cardRule } from './card';
 import { emailRule } from './email';
 import { phoneRule } from './phone';
 import { rrnRule } from './rrn';
 import type { DetectorRule, LineForScan } from './types';
 
-export const ALL_RULES: DetectorRule[] = [emailRule, phoneRule, rrnRule];
+export const ALL_RULES: DetectorRule[] = [emailRule, phoneRule, rrnRule, cardRule];
 
 export function runDetectors(
   lines: LineForScan[],
