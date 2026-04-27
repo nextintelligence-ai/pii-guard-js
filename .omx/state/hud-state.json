@@ -1,6 +1,0 @@
-{
-  "last_turn_at": "2026-04-27T08:28:20.221Z",
-  "turn_count": 10,
-  "last_progress_at": "2026-04-27T08:28:20.221Z",
-  "last_agent_output": "검토 결과, 이 패키지는 **현재 PII “검출” 기능의 핵심 의존성으로 들여오지 않는 쪽**이 맞겠습니다.\n\n주요 이유는 이렇습니다.\n\n- `@cho_o/pii-masking-j"
-}

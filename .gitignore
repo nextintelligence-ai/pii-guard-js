@@ -2,6 +2,7 @@ node_modules
 dist
 dist-multi
 .worktrees
+.omx
 .DS_Store
 *.log
 .env
