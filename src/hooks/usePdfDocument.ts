@@ -19,13 +19,39 @@ export function usePdfDocument() {
         if (!ok) return;
       }
       reset();
-      setDoc({ kind: 'loading' });
-      try {
-        const buf = await fileToArrayBuffer(f);
-        const { pages } = await getPdfWorker().open(buf);
-        setDoc({ kind: 'ready', pages, fileName: f.name });
-      } catch (e) {
-        setDoc({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+
+      let attempt = 0;
+      let password: string | undefined;
+      while (attempt < 4) {
+        try {
+          setDoc({ kind: 'loading' });
+          const buf = await fileToArrayBuffer(f);
+          const opts = password !== undefined ? { password } : undefined;
+          const { pages } = await getPdfWorker().open(buf, opts);
+          setDoc({ kind: 'ready', pages, fileName: f.name });
+          return;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('PASSWORD_REQUIRED') || msg.includes('PASSWORD_WRONG')) {
+            attempt += 1;
+            if (attempt > 3) {
+              setDoc({ kind: 'error', message: '비밀번호 인증 실패' });
+              return;
+            }
+            const promptMsg = msg.includes('PASSWORD_WRONG')
+              ? `비밀번호가 틀립니다. 다시 입력하세요. (${attempt}/3)`
+              : '암호화된 PDF 입니다. 비밀번호를 입력하세요.';
+            const pwd = window.prompt(promptMsg);
+            if (pwd === null) {
+              setDoc({ kind: 'error', message: '비밀번호 입력이 취소되었습니다.' });
+              return;
+            }
+            password = pwd;
+            continue;
+          }
+          setDoc({ kind: 'error', message: msg });
+          return;
+        }
       }
     },
     [setDoc, reset],

@@ -90,13 +90,13 @@ export async function openDocument(
   if (doc.needsPassword()) {
     if (password === undefined) {
       doc.destroy();
-      throw new Error('PDF_PASSWORD_REQUIRED');
+      throw new Error('PASSWORD_REQUIRED');
     }
     const ok = doc.authenticatePassword(password);
     // mupdf 의 authenticatePassword 는 0 이면 실패, 그 외는 권한 비트.
     if (!ok) {
       doc.destroy();
-      throw new Error('PDF_PASSWORD_INVALID');
+      throw new Error('PASSWORD_WRONG');
     }
   }
   currentDoc = doc;
