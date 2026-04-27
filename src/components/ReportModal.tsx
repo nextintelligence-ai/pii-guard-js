@@ -78,12 +78,12 @@ export function ReportModal() {
               {r.postCheckLeaks}건 {ok ? '(통과)' : '(주의)'}
             </Badge>
           </li>
-          <li className="space-y-1.5">
-            <span className="text-xs text-muted-foreground">카테고리별</span>
+          <li className="flex items-start justify-between gap-3">
+            <span className="shrink-0 pt-0.5 text-muted-foreground">카테고리별</span>
             {activeCats.length === 0 ? (
-              <p className="text-xs text-muted-foreground">없음</p>
+              <span className="text-muted-foreground">없음</span>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 {activeCats.map(([k, n]) => (
                   <Badge key={k} variant="outline" className="gap-1.5 font-normal">
                     <span
