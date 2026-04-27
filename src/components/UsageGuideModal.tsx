@@ -1,3 +1,17 @@
+import { Info } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
 type Props = {
   open: boolean;
   doNotShowAgain: boolean;
@@ -30,64 +44,52 @@ export function UsageGuideModal({
   onDoNotShowAgainChange,
   onClose,
 }: Props) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="usage-guide-title"
-        className="bg-white rounded p-6 w-full max-w-[520px] shadow-xl"
-      >
-        <div>
-          <div>
-            <h2 id="usage-guide-title" className="text-lg font-bold">
-              사용 방법
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              이 안내는 상단 사용법 버튼에서 언제든 다시 볼 수 있습니다.
-            </p>
-          </div>
-        </div>
+    <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader>
+          <DialogTitle>사용 방법</DialogTitle>
+          <DialogDescription>
+            이 안내는 상단 사용법 버튼에서 언제든 다시 볼 수 있습니다.
+          </DialogDescription>
+        </DialogHeader>
 
-        <ol className="mt-5 space-y-3">
+        <ol className="space-y-3">
           {STEPS.map((step, idx) => (
             <li key={step.title} className="flex gap-3">
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-slate-900 text-xs font-semibold text-white">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
                 {idx + 1}
               </span>
               <div>
-                <h3 className="font-semibold text-sm text-slate-900">{step.title}</h3>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{step.body}</p>
+                <h3 className="text-sm font-semibold">{step.title}</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{step.body}</p>
               </div>
             </li>
           ))}
         </ol>
 
-        <div className="mt-5 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          스캔본처럼 텍스트 레이어가 없는 PDF는 자동 탐지 결과가 없을 수 있습니다. 이 경우
-          수동 박스로 가릴 영역을 지정하세요.
-        </div>
+        <Alert variant="warning">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            스캔본처럼 텍스트 레이어가 없는 PDF는 자동 탐지 결과가 없을 수 있습니다. 이 경우
+            수동 박스로 가릴 영역을 지정하세요.
+          </AlertDescription>
+        </Alert>
 
-        <div className="mt-5 flex items-center justify-between gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input
-              type="checkbox"
+        <DialogFooter className="sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="dont-show-again"
               checked={doNotShowAgain}
-              onChange={(e) => onDoNotShowAgainChange(e.target.checked)}
+              onCheckedChange={(c) => onDoNotShowAgainChange(c === true)}
             />
-            <span>더 이상 표시하지 않기</span>
-          </label>
-          <button
-            type="button"
-            className="px-4 py-2 rounded bg-slate-900 text-white"
-            onClick={onClose}
-          >
-            시작하기
-          </button>
-        </div>
-      </div>
-    </div>
+            <Label htmlFor="dont-show-again" className="text-sm">
+              더 이상 표시하지 않기
+            </Label>
+          </div>
+          <Button onClick={onClose}>시작하기</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

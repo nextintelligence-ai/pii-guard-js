@@ -1,16 +1,31 @@
+import { CheckCircle2, AlertTriangle, Download } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { useApply } from '@/hooks/useApply';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export function ReportModal() {
   const doc = useAppStore((s) => s.doc);
   const dismissed = useAppStore((s) => s.reportDismissed);
   const { download } = useApply();
-  if (doc.kind !== 'done' || dismissed) return null;
-  const r = doc.report;
-  const close = (): void => {
-    // 결과 blob/리포트는 유지한 채 모달만 숨겨 다운로드 버튼이 계속 활성 상태가 되도록 한다.
-    useAppStore.getState().dismissReport();
+
+  if (doc.kind !== 'done') return null;
+
+  const open = !dismissed;
+  const onOpenChange = (next: boolean): void => {
+    if (!next) useAppStore.getState().dismissReport();
   };
+
+  const r = doc.report;
+  const ok = r.postCheckLeaks === 0;
   const categoryLine =
     Object.entries(r.byCategory)
       .filter(([, n]) => n > 0)
@@ -18,31 +33,46 @@ export function ReportModal() {
       .join(', ') || '없음';
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded p-6 w-[420px] shadow-xl">
-        <h2 className="text-lg font-bold">익명화 완료</h2>
-        <ul className="mt-3 text-sm space-y-1">
-          <li>총 적용: {r.totalBoxes}건</li>
-          <li>영향 페이지: {r.pagesAffected.length}페이지</li>
-          <li className={r.postCheckLeaks > 0 ? 'text-red-600' : 'text-green-700'}>
-            검증 누수: {r.postCheckLeaks}건{' '}
-            {r.postCheckLeaks === 0 ? '(통과)' : '(주의)'}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {ok ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            ) : (
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+            )}
+            익명화 완료
+          </DialogTitle>
+          <DialogDescription>적용 결과 요약입니다.</DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-2 text-sm">
+          <li className="flex items-center justify-between">
+            <span className="text-muted-foreground">총 적용</span>
+            <Badge variant="secondary">{r.totalBoxes}건</Badge>
           </li>
-          <li className="text-xs text-slate-500 mt-2">카테고리별: {categoryLine}</li>
+          <li className="flex items-center justify-between">
+            <span className="text-muted-foreground">영향 페이지</span>
+            <Badge variant="secondary">{r.pagesAffected.length}페이지</Badge>
+          </li>
+          <li className="flex items-center justify-between">
+            <span className="text-muted-foreground">검증 누수</span>
+            <Badge variant={ok ? 'default' : 'destructive'}>
+              {r.postCheckLeaks}건 {ok ? '(통과)' : '(주의)'}
+            </Badge>
+          </li>
+          <li className="text-xs text-muted-foreground">카테고리별: {categoryLine}</li>
         </ul>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="px-3 py-1 border rounded" onClick={close}>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => useAppStore.getState().dismissReport()}>
             닫기
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1 rounded bg-slate-700 text-white"
-            onClick={download}
-          >
+          </Button>
+          <Button onClick={download}>
+            <Download />
             다운로드
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
