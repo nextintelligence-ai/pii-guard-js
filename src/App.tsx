@@ -105,18 +105,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {doc.kind === "done" && (
-                <Alert>
-                  <ShieldCheck className="h-4 w-4" />
-                  <AlertDescription>
-                    <span className="font-medium text-foreground">
-                      익명화가 끝났어요!
-                    </span>
-                    <br />
-                    상단의 'PDF 저장' 버튼을 눌러 내 PC에 저장하세요.
-                  </AlertDescription>
-                </Alert>
-              )}
               {doc.kind === "error" && (
                 <Alert variant="destructive">
                   <AlertDescription>
@@ -142,6 +130,23 @@ export default function App() {
               </div>
               <PageNavigator />
             </>
+          ) : doc.kind === "done" ? (
+            <div className="flex flex-col items-center gap-4 text-center">
+              <ShieldCheck className="h-16 w-16 text-green-600" />
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold">익명화가 끝났어요!</h2>
+                <p className="text-sm text-muted-foreground">
+                  상단의 'PDF 저장' 버튼을 눌러 내 PC에 저장하세요.
+                </p>
+              </div>
+            </div>
+          ) : doc.kind === "applying" ? (
+            <div className="flex flex-col items-center gap-3 text-center">
+              <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                개인정보를 가리는 중이에요…
+              </p>
+            </div>
           ) : (
             <div className="text-muted-foreground">상태: {doc.kind}</div>
           )}

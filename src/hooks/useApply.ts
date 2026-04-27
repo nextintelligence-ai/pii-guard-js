@@ -9,11 +9,10 @@ export function useApply() {
     const s = useAppStore.getState();
     const enabled = Object.values(s.boxes).filter((b) => b.enabled);
     if (enabled.length === 0) {
-      toast.warning('적용할 박스가 없습니다');
+      toast.error('적용할 박스가 없습니다');
       return;
     }
     s.setDoc({ kind: 'applying' });
-    toast.loading('익명화 적용 중…', { id: 'apply' });
     try {
       const api = await getPdfWorker();
       const { pdf, report } = await api.apply(enabled, s.maskStyle);
@@ -23,14 +22,12 @@ export function useApply() {
       const blob = new Blob([pdf.buffer as ArrayBuffer], { type: 'application/pdf' });
       useAppStore.getState().setDoc({ kind: 'done', outputBlob: blob, report });
       if (report.postCheckLeaks > 0) {
-        toast.warning(`익명화 완료 — 검증 누수 ${report.postCheckLeaks}건`, { id: 'apply' });
-      } else {
-        toast.success('익명화 완료', { id: 'apply' });
+        toast.error(`검증 누수 ${report.postCheckLeaks}건이 발견되었습니다`);
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       useAppStore.getState().setDoc({ kind: 'error', message });
-      toast.error(`적용 실패: ${message}`, { id: 'apply' });
+      toast.error(`적용 실패: ${message}`);
     }
   }, []);
 
@@ -41,7 +38,6 @@ export function useApply() {
       return;
     }
     downloadBlob(s.doc.outputBlob, 'redacted.pdf');
-    toast.success('PDF 저장 시작');
   }, []);
 
   return { apply, download };
