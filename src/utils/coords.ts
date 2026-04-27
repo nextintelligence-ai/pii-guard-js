@@ -70,3 +70,7 @@ export function canvasPxToPdfRect(
   const ys = unrotated.map((p) => flipY(p[1]));
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
 }
+
+export function bboxesIntersect(a: Bbox, b: Bbox): boolean {
+  return !(a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1]);
+}

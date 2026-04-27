@@ -1,7 +1,8 @@
 import { useRef, useState, type PointerEvent as RPE } from 'react';
 import { useAppStore } from '@/state/store';
 import { useBoxesForPage } from '@/state/selectors';
-import { pdfRectToCanvasPx, canvasPxToPdfRect } from '@/utils/coords';
+import { useSpansForPage } from '@/hooks/useSpansForPage';
+import { pdfRectToCanvasPx, canvasPxToPdfRect, bboxesIntersect } from '@/utils/coords';
 import type { Bbox, RedactionBox } from '@/types/domain';
 
 type Props = { widthPx: number; heightPx: number; scale: number };
@@ -40,7 +41,7 @@ const HANDLE_CURSORS = [
 
 type Interaction =
   | { mode: 'idle' }
-  | { mode: 'drag-create'; start: [number, number]; current: Bbox }
+  | { mode: 'drag-create'; start: [number, number]; current: Bbox; shift: boolean }
   | {
       mode: 'move';
       id: string;
@@ -115,6 +116,7 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
   const boxes = useBoxesForPage(page);
   const selectedBoxId = useAppStore((s) => s.selectedBoxId);
   const meta = docPages?.[page];
+  const spans = useSpansForPage(page, !!meta);
 
   const [interaction, setInteraction] = useState<Interaction>({ mode: 'idle' });
   const ref = useRef<SVGSVGElement | null>(null);
@@ -139,7 +141,12 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
     // 빈 영역 클릭: 선택 해제 + 드래그-생성 시작.
     if (selectedBoxId) useAppStore.getState().selectBox(null);
     const p = pointerPos(e);
-    setInteraction({ mode: 'drag-create', start: p, current: [p[0], p[1], p[0], p[1]] });
+    setInteraction({
+      mode: 'drag-create',
+      start: p,
+      current: [p[0], p[1], p[0], p[1]],
+      shift: e.shiftKey,
+    });
     ref.current?.setPointerCapture(e.pointerId);
   };
 
@@ -181,7 +188,28 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
       const r = interaction.current;
       if (r[2] - r[0] > 3 && r[3] - r[1] > 3) {
         const pdfRect = canvasPxToPdfRect(r, scale, meta.widthPt, meta.heightPt, meta.rotation);
-        useAppStore.getState().addManualBox({ pageIndex: page, bbox: pdfRect });
+        if (interaction.shift) {
+          // 텍스트 드래그 선택: 드래그 영역과 교차하는 스팬들의 합집합 bbox 를 박스로 추가.
+          const hits = spans.filter((sp) => bboxesIntersect(sp.bbox, pdfRect));
+          if (hits.length > 0) {
+            let x0 = Infinity;
+            let y0 = Infinity;
+            let x1 = -Infinity;
+            let y1 = -Infinity;
+            for (const h of hits) {
+              if (h.bbox[0] < x0) x0 = h.bbox[0];
+              if (h.bbox[1] < y0) y0 = h.bbox[1];
+              if (h.bbox[2] > x1) x1 = h.bbox[2];
+              if (h.bbox[3] > y1) y1 = h.bbox[3];
+            }
+            useAppStore.getState().addTextSelectBox({
+              pageIndex: page,
+              bbox: [x0, y0, x1, y1],
+            });
+          }
+        } else {
+          useAppStore.getState().addManualBox({ pageIndex: page, bbox: pdfRect });
+        }
       }
     } else if (interaction.mode === 'move' || interaction.mode === 'resize') {
       const r = interaction.pending;
@@ -311,15 +339,15 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
         ));
       })()}
 
-      {/* 드래그-생성 중 미리보기 */}
+      {/* 드래그-생성 중 미리보기. shift+드래그 시에는 텍스트 선택 모드를 시각적으로 구분. */}
       {interaction.mode === 'drag-create' && (
         <rect
           x={interaction.current[0]}
           y={interaction.current[1]}
           width={interaction.current[2] - interaction.current[0]}
           height={interaction.current[3] - interaction.current[1]}
-          fill="rgba(15,23,42,0.25)"
-          stroke="#0f172a"
+          fill={interaction.shift ? 'rgba(37,99,235,0.18)' : 'rgba(15,23,42,0.25)'}
+          stroke={interaction.shift ? '#2563eb' : '#0f172a'}
           strokeDasharray="4 3"
           pointerEvents="none"
         />
