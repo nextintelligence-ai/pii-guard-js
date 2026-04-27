@@ -20,6 +20,7 @@ const CAT_LABELS: Record<string, string> = {
   account: '계좌번호',
   businessNo: '사업자번호',
   card: '카드번호',
+  address: '주소',
   manual: '수동',
 };
 
@@ -30,6 +31,7 @@ const CAT_COLORS: Record<string, string> = {
   account: 'bg-green-500',
   businessNo: 'bg-purple-500',
   card: 'bg-yellow-500',
+  address: 'bg-pink-500',
   manual: 'bg-slate-500',
 };
 

@@ -20,6 +20,7 @@ const LABELS: Record<DetectionCategory, string> = {
   account: '계좌번호',
   businessNo: '사업자번호',
   card: '카드번호',
+  address: '주소',
 };
 
 const CAT_COLORS: Record<DetectionCategory, string> = {
@@ -29,9 +30,18 @@ const CAT_COLORS: Record<DetectionCategory, string> = {
   account: 'bg-green-500',
   businessNo: 'bg-purple-500',
   card: 'bg-yellow-500',
+  address: 'bg-pink-500',
 };
 
-const CATS: DetectionCategory[] = ['rrn', 'phone', 'email', 'account', 'businessNo', 'card'];
+const CATS: DetectionCategory[] = [
+  'rrn',
+  'phone',
+  'email',
+  'account',
+  'businessNo',
+  'card',
+  'address',
+];
 
 type AutoBox = RedactionBox & { category: DetectionCategory };
 type ManualBox = RedactionBox & { source: 'manual-rect' | 'text-select' };

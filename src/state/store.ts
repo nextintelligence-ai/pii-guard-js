@@ -59,6 +59,7 @@ const initial: State = {
     account: true,
     businessNo: true,
     card: true,
+    address: true,
   },
   reportDismissed: false,
 };

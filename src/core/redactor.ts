@@ -36,6 +36,7 @@ function makeEmptyCounts(): ApplyReport['byCategory'] {
     account: 0,
     businessNo: 0,
     card: 0,
+    address: 0,
     manual: 0,
   };
 }

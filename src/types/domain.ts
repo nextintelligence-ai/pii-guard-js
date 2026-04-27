@@ -12,7 +12,8 @@ export type DetectionCategory =
   | 'email'
   | 'account'
   | 'businessNo'
-  | 'card';
+  | 'card'
+  | 'address';
 
 export type Candidate = {
   id: string;
