@@ -11,6 +11,27 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+const CAT_LABELS: Record<string, string> = {
+  rrn: '주민등록번호',
+  phone: '전화번호',
+  email: '이메일',
+  account: '계좌번호',
+  businessNo: '사업자번호',
+  card: '카드번호',
+  manual: '수동',
+};
+
+const CAT_COLORS: Record<string, string> = {
+  rrn: 'bg-red-500',
+  phone: 'bg-orange-500',
+  email: 'bg-blue-500',
+  account: 'bg-green-500',
+  businessNo: 'bg-purple-500',
+  card: 'bg-yellow-500',
+  manual: 'bg-slate-500',
+};
 
 export function ReportModal() {
   const doc = useAppStore((s) => s.doc);
@@ -26,11 +47,7 @@ export function ReportModal() {
 
   const r = doc.report;
   const ok = r.postCheckLeaks === 0;
-  const categoryLine =
-    Object.entries(r.byCategory)
-      .filter(([, n]) => n > 0)
-      .map(([k, n]) => `${k}=${n}`)
-      .join(', ') || '없음';
+  const activeCats = Object.entries(r.byCategory).filter(([, n]) => n > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,7 +78,24 @@ export function ReportModal() {
               {r.postCheckLeaks}건 {ok ? '(통과)' : '(주의)'}
             </Badge>
           </li>
-          <li className="text-xs text-muted-foreground">카테고리별: {categoryLine}</li>
+          <li className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">카테고리별</span>
+            {activeCats.length === 0 ? (
+              <p className="text-xs text-muted-foreground">없음</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {activeCats.map(([k, n]) => (
+                  <Badge key={k} variant="outline" className="gap-1.5 font-normal">
+                    <span
+                      className={cn('h-1.5 w-1.5 rounded-full', CAT_COLORS[k] ?? 'bg-slate-500')}
+                    />
+                    {CAT_LABELS[k] ?? k}
+                    <span className="font-semibold tabular-nums">{n}</span>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </li>
         </ul>
         <DialogFooter>
           <Button variant="outline" onClick={() => useAppStore.getState().dismissReport()}>
