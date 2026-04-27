@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc -b"
+    "lint": "tsc -b",
+    "prebuild": "node scripts/embed-wasm.mjs",
+    "prebuild:multi": "node scripts/embed-wasm.mjs",
+    "predev": "node scripts/embed-wasm.mjs",
+    "pretest": "node scripts/embed-wasm.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
