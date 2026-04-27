@@ -9,7 +9,8 @@ export function useApply() {
     const enabled = Object.values(s.boxes).filter((b) => b.enabled);
     s.setDoc({ kind: 'applying' });
     try {
-      const { pdf, report } = await getPdfWorker().apply(enabled, s.maskStyle);
+      const api = await getPdfWorker();
+      const { pdf, report } = await api.apply(enabled, s.maskStyle);
       // pdf 는 워커에서 transfer 된 Uint8Array<ArrayBufferLike> 라
       // Blob 의 BlobPart(ArrayBufferView<ArrayBuffer>) 와 타입이 다르다.
       // .buffer 는 ArrayBuffer 로 좁혀지므로 그대로 BlobPart 로 전달한다.

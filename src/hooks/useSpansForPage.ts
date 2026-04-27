@@ -11,7 +11,8 @@ export function useSpansForPage(pageIndex: number, ready: boolean) {
     }
     let cancelled = false;
     (async () => {
-      const v = await getPdfWorker().extractSpans(pageIndex);
+      const api = await getPdfWorker();
+      const v = await api.extractSpans(pageIndex);
       if (!cancelled) setSpans(v);
     })();
     return () => {

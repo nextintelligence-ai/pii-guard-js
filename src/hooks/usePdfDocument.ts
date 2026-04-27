@@ -27,7 +27,8 @@ export function usePdfDocument() {
           setDoc({ kind: 'loading' });
           const buf = await fileToArrayBuffer(f);
           const opts = password !== undefined ? { password } : undefined;
-          const { pages } = await getPdfWorker().open(buf, opts);
+          const api = await getPdfWorker();
+          const { pages } = await api.open(buf, opts);
           setDoc({ kind: 'ready', pages, fileName: f.name });
           return;
         } catch (e) {
