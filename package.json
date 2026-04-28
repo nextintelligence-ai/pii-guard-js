@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc -b",
+    "release": "node scripts/release.mjs",
     "prebuild": "node scripts/embed-wasm.mjs",
     "postbuild": "node scripts/verify-no-external.mjs && node scripts/verify-build-size.mjs",
     "prebuild:multi": "node scripts/embed-wasm.mjs",
