@@ -78,12 +78,6 @@ export function ApplyResultDialog() {
               {result.pagesAffected.length}페이지
             </Badge>
           </li>
-          <li className="flex items-center justify-between">
-            <span className="text-muted-foreground">검증 누수</span>
-            <Badge variant={ok ? "default" : "destructive"}>
-              {result.postCheckLeaks}건 {ok ? "(통과)" : "(주의)"}
-            </Badge>
-          </li>
           <li className="flex items-start justify-between gap-3">
             <span className="shrink-0 pt-0.5 text-muted-foreground">
               카테고리별
