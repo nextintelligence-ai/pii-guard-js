@@ -15,7 +15,7 @@ export type DocState =
   | { kind: 'loading' }
   | { kind: 'ready'; pages: PageMeta[]; fileName: string }
   | { kind: 'applying' }
-  | { kind: 'done'; outputBlob: Blob; report: ApplyReport }
+  | { kind: 'done'; outputBlob: Blob; report: ApplyReport; fileName: string }
   | { kind: 'error'; message: string };
 
 type State = {

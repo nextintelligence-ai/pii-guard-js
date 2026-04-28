@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppStore } from '@/state/store';
-import { downloadBlob } from '@/utils/fileIO';
+import { buildAnonymizedFileName, downloadBlob } from '@/utils/fileIO';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 import { toast } from '@/components/ui/sonner';
 
@@ -12,6 +12,7 @@ export function useApply() {
       toast.error('적용할 박스가 없습니다');
       return;
     }
+    const sourceFileName = s.doc.kind === 'ready' ? s.doc.fileName : '';
     s.setDoc({ kind: 'applying' });
     try {
       const api = await getPdfWorker();
@@ -20,7 +21,12 @@ export function useApply() {
       // Blob 의 BlobPart(ArrayBufferView<ArrayBuffer>) 와 타입이 다르다.
       // .buffer 는 ArrayBuffer 로 좁혀지므로 그대로 BlobPart 로 전달한다.
       const blob = new Blob([pdf.buffer as ArrayBuffer], { type: 'application/pdf' });
-      useAppStore.getState().setDoc({ kind: 'done', outputBlob: blob, report });
+      useAppStore.getState().setDoc({
+        kind: 'done',
+        outputBlob: blob,
+        report,
+        fileName: sourceFileName,
+      });
       if (report.postCheckLeaks > 0) {
         toast.error(`검증 누수 ${report.postCheckLeaks}건이 발견되었습니다`);
       }
@@ -37,7 +43,7 @@ export function useApply() {
       toast.error('저장할 결과가 없습니다');
       return;
     }
-    downloadBlob(s.doc.outputBlob, 'redacted.pdf');
+    downloadBlob(s.doc.outputBlob, buildAnonymizedFileName(s.doc.fileName));
   }, []);
 
   return { apply, download };

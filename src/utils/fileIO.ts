@@ -10,3 +10,12 @@ export function downloadBlob(blob: Blob, filename: string): void {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+const ANONYMIZED_SUFFIX = '-anonymized';
+
+export function buildAnonymizedFileName(originalName: string | undefined | null): string {
+  const trimmed = (originalName ?? '').trim();
+  if (!trimmed) return `output${ANONYMIZED_SUFFIX}.pdf`;
+  const base = trimmed.replace(/\.pdf$/i, '');
+  return `${base}${ANONYMIZED_SUFFIX}.pdf`;
+}
