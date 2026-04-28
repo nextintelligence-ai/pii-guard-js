@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { FolderOpen, Undo2, Redo2, HelpCircle, Shield, Save } from 'lucide-react';
+import { FolderOpen, Undo2, Redo2, HelpCircle, Shield } from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -13,11 +13,10 @@ import {
 type Props = {
   onLoad(f: File): void;
   onApply(): void;
-  onDownload(): void;
   onHelp(): void;
 };
 
-export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
+export function Toolbar({ onLoad, onApply, onHelp }: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -91,10 +90,6 @@ export function Toolbar({ onLoad, onApply, onDownload, onHelp }: Props) {
         >
           <Shield />
           익명화 적용
-        </Button>
-        <Button size="sm" onClick={onDownload} disabled={docKind !== 'done'}>
-          <Save />
-          PDF 저장
         </Button>
       </div>
     </TooltipProvider>

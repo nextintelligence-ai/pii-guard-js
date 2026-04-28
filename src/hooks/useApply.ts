@@ -21,15 +21,12 @@ export function useApply() {
       // Blob 의 BlobPart(ArrayBufferView<ArrayBuffer>) 와 타입이 다르다.
       // .buffer 는 ArrayBuffer 로 좁혀지므로 그대로 BlobPart 로 전달한다.
       const blob = new Blob([pdf.buffer as ArrayBuffer], { type: 'application/pdf' });
-      useAppStore.getState().setDoc({
-        kind: 'done',
-        outputBlob: blob,
-        report,
-        fileName: sourceFileName,
-      });
-      if (report.postCheckLeaks > 0) {
-        toast.error(`검증 누수 ${report.postCheckLeaks}건이 발견되었습니다`);
-      }
+      downloadBlob(blob, buildAnonymizedFileName(sourceFileName));
+      // 결과는 즉시 다운로드되므로 문서 상태는 초기화해 드롭존 화면으로
+      // 돌아가고, 별도의 applyResult 슬롯에 보관한 리포트로 결과 다이얼로그를 띄운다.
+      // 순서 주의: reset() 이 applyResult 도 비우므로 setApplyResult 보다 먼저 호출한다.
+      useAppStore.getState().reset();
+      useAppStore.getState().setApplyResult(report);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       useAppStore.getState().setDoc({ kind: 'error', message });
@@ -37,14 +34,5 @@ export function useApply() {
     }
   }, []);
 
-  const download = useCallback(() => {
-    const s = useAppStore.getState();
-    if (s.doc.kind !== 'done') {
-      toast.error('저장할 결과가 없습니다');
-      return;
-    }
-    downloadBlob(s.doc.outputBlob, buildAnonymizedFileName(s.doc.fileName));
-  }, []);
-
-  return { apply, download };
+  return { apply };
 }

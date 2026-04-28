@@ -15,7 +15,6 @@ export type DocState =
   | { kind: 'loading' }
   | { kind: 'ready'; pages: PageMeta[]; fileName: string }
   | { kind: 'applying' }
-  | { kind: 'done'; outputBlob: Blob; report: ApplyReport; fileName: string }
   | { kind: 'error'; message: string };
 
 type State = {
@@ -26,12 +25,12 @@ type State = {
   selectedBoxId: string | null;
   focusNonce: number;
   categoryEnabled: Record<DetectionCategory, boolean>;
-  reportDismissed: boolean;
+  applyResult: ApplyReport | null;
 };
 
 type Actions = {
   setDoc(d: DocState): void;
-  dismissReport(): void;
+  setApplyResult(r: ApplyReport | null): void;
   goToPage(i: number): void;
   setCandidates(list: Candidate[]): void;
   addAutoBox(c: Candidate): void;
@@ -64,22 +63,16 @@ const initial: State = {
     card: true,
     address: true,
   },
-  reportDismissed: false,
+  applyResult: null,
 };
 
 export const useAppStore = create<State & Actions>((set, get) => ({
   ...initial,
   setDoc(d) {
-    // 새 done 상태로 전환할 때마다 모달 dismiss 플래그를 초기화한다.
-    // 그 외 상태(empty/loading/ready/applying/error)는 reportDismissed 를 그대로 둔다.
-    if (d.kind === 'done') {
-      set({ doc: d, reportDismissed: false });
-    } else {
-      set({ doc: d });
-    }
+    set({ doc: d });
   },
-  dismissReport() {
-    set({ reportDismissed: true });
+  setApplyResult(r) {
+    set({ applyResult: r });
   },
   goToPage(i) {
     set({ currentPage: i });

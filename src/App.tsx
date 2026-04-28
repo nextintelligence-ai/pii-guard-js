@@ -5,9 +5,9 @@ import { DropZone } from "@/components/DropZone";
 import { PdfCanvas } from "@/components/PdfCanvas";
 import { CandidatePanel } from "@/components/CandidatePanel";
 import { PageNavigator } from "@/components/PageNavigator";
-import { ReportModal } from "@/components/ReportModal";
+import { ApplyResultDialog } from "@/components/ApplyResultDialog";
 import { UsageGuideModal } from "@/components/UsageGuideModal";
-import { ScanSearch, Loader2, ShieldCheck } from "lucide-react";
+import { ScanSearch, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ export default function App() {
   useKeyboard();
   useAutoDetect();
   const { load } = usePdfDocument();
-  const { apply, download } = useApply();
+  const { apply } = useApply();
   const doc = useAppStore((s) => s.doc);
   const [usageGuideOpen, setUsageGuideOpen] = useState(false);
   const [doNotShowUsageGuideAgain, setDoNotShowUsageGuideAgain] = useState(
@@ -57,7 +57,6 @@ export default function App() {
       <Toolbar
         onLoad={load}
         onApply={apply}
-        onDownload={download}
         onHelp={openUsageGuide}
       />
       <main className="flex-1 grid grid-cols-[320px_1fr] gap-3 p-3">
@@ -133,16 +132,6 @@ export default function App() {
               </div>
               <PageNavigator />
             </>
-          ) : doc.kind === "done" ? (
-            <div className="flex flex-col items-center gap-4 text-center">
-              <ShieldCheck className="h-16 w-16 text-green-600" />
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold">익명화가 끝났어요!</h2>
-                <p className="text-sm text-muted-foreground">
-                  상단의 'PDF 저장' 버튼을 눌러 내 PC에 저장하세요.
-                </p>
-              </div>
-            </div>
           ) : doc.kind === "applying" ? (
             <div className="flex flex-col items-center gap-3 text-center">
               <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
@@ -155,7 +144,7 @@ export default function App() {
           )}
         </Card>
       </main>
-      <ReportModal />
+      <ApplyResultDialog />
       <UsageGuideModal
         open={usageGuideOpen}
         doNotShowAgain={doNotShowUsageGuideAgain}
