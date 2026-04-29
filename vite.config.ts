@@ -330,7 +330,15 @@ export default defineConfig(({ mode }) => {
       // mupdf-wasm.js 는 워커 번들 내부에서 import 되므로, asset emit 차단 플러그인을
       // 워커 빌드 파이프라인에도 적용해야 한다. Vite 5 에서는 worker.plugins 가
       // 별도 함수로 분리되어 있어 main config 의 plugins 가 자동으로 상속되지 않는다.
-      plugins: () => [stripMupdfWasmAsset()],
+      //
+      // NLP 모드의 NER 워커(`ner.worker.ts?worker&inline`) 는 @huggingface/transformers +
+      // onnxruntime-web 을 포함한다. 메인 번들과 동일하게 jsdelivr 리터럴 / proxy worker
+      // wasm dataURL 회귀를 워커 빌드 파이프라인에서도 차단해 워커 번들 내부의 onnx wasm
+      // 이중 인라인을 방지한다.
+      plugins: () =>
+        isNlp
+          ? [stripMupdfWasmAsset(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
+          : [stripMupdfWasmAsset()],
       rollupOptions: {
         // mupdf 가 내부에서 dynamic import 를 사용하므로 단일 청크로 인라인한다
         // (?worker&inline 또는 viteSingleFile 과 함께 동작).
