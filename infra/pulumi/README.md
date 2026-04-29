@@ -1,61 +1,55 @@
- # AWS TypeScript Pulumi Template
+# pii-guard-js AWS Infrastructure
 
- A minimal Pulumi template for provisioning AWS infrastructure using TypeScript. This template creates an Amazon S3 bucket and exports its name.
+Pulumi TypeScript stack for deploying `pii-guard-js` (single-HTML static site) to AWS S3 + CloudFront.
 
- ## Prerequisites
+## Architecture
 
- - Pulumi CLI (>= v3): https://www.pulumi.com/docs/get-started/install/
- - Node.js (>= 14): https://nodejs.org/
- - AWS credentials configured (e.g., via `aws configure` or environment variables)
+> 📎 [aws-infrastructure.drawio](../../docs/architecture/aws-infrastructure.drawio) — editable in draw.io
 
- ## Getting Started
+![AWS Infrastructure](../../docs/architecture/aws-infrastructure.png)
 
- 1. Initialize a new Pulumi project:
+## Resources
 
-    ```bash
-    pulumi new aws-typescript
-    ```
+| Account | Resource | Identifier |
+|---------|----------|------------|
+| P2 (officemail-prod) | S3 Bucket | `officeagent-pii-guard-prod` |
+| P2 (officemail-prod) | CloudFront Distribution | alias `pii-guard-local.officeagent.kr` |
+| P2 (officemail-prod) | ACM Certificate | `pii-guard-local.officeagent.kr` (us-east-1) |
+| P1 (9folders) | Route53 Hosted Zone | `officeagent.kr` (`Z04331861UDPHXIBOW1BF`) |
+| P1 (9folders) | IAM Role | `pii-guard-cross-account-route53` |
 
-    Follow the prompts to set your:
-    - Project name
-    - Project description
-    - AWS region (defaults to `us-east-1`)
+## Deploy
 
- 2. Preview and deploy your infrastructure:
+```bash
+# 1. Build the app (project root)
+npm run build
 
-    ```bash
-    pulumi preview
-    pulumi up
-    ```
+# 2. Deploy with Pulumi
+cd infra/pulumi
+AWS_PROFILE=officemail-prod sp          # log in to S3 backend
+pulumi stack select pii-guard-prod
+pulumi up
+```
 
- 3. When you're finished, tear down your stack:
+On redeploy, `pulumi up` detects the changed `index.html` etag and uploads automatically.
 
-    ```bash
-    pulumi destroy
-    pulumi stack rm
-    ```
+CloudFront cache is invalidated automatically by GitHub Actions on every push to `main`.
 
- ## Project Layout
+## GitHub Actions (CI/CD)
 
- - `Pulumi.yaml` — Pulumi project and template metadata
- - `index.ts` — Main Pulumi program (creates an S3 bucket)
- - `package.json` — Node.js dependencies
- - `tsconfig.json` — TypeScript compiler options
+The workflow at `.github/workflows/deploy.yml` runs on every push to `main`:
 
- ## Configuration
+1. `npm run build` — produces `dist/index.html`
+2. `aws s3 cp` — uploads to S3
+3. `aws cloudfront create-invalidation` — invalidates CloudFront cache and waits for completion
 
- | Key           | Description                             | Default     |
- | ------------- | --------------------------------------- | ----------- |
- | `aws:region`  | The AWS region to deploy resources into | `us-east-1` |
+Authentication uses OIDC — no long-lived AWS credentials stored in GitHub.
 
- Use `pulumi config set <key> <value>` to customize configuration.
+| Resource | Value |
+|----------|-------|
+| IAM Role (OIDC) | `arn:aws:iam::677276107201:role/pii-guard-github-actions-deploy` |
+| Permissions | `s3:PutObject` on bucket + `cloudfront:CreateInvalidation` on distribution |
 
- ## Next Steps
+## Troubleshooting
 
- - Extend `index.ts` to provision additional resources (e.g., VPCs, Lambda functions, DynamoDB tables).
- - Explore [Pulumi AWSX](https://www.pulumi.com/docs/reference/pkg/awsx/) for higher-level AWS components.
- - Consult the [Pulumi documentation](https://www.pulumi.com/docs/) for more examples and best practices.
-
- ## Getting Help
-
- If you encounter any issues or have suggestions, please open an issue in this repository.
+See [`docs/troubleshooting/`](./docs/troubleshooting/) for incident records.
