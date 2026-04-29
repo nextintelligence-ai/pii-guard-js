@@ -1,0 +1,14 @@
+{
+  "model": "openai/privacy-filter",
+  "createdAt": "2026-04-29",
+  "fixtures": [
+    {
+      "id": "ko-name-address",
+      "expectedCounts": {}
+    },
+    {
+      "id": "ko-mixed",
+      "expectedCounts": {}
+    }
+  ]
+}
