@@ -47,4 +47,33 @@ describe('AppStore', () => {
     s.focusBox(id);
     expect(useAppStore.getState().focusNonce).toBe(firstNonce + 1);
   });
+
+  it('NER 후보는 score 가 낮아도 보존하고 박스는 기본 OFF 로 만든다', () => {
+    const s = useAppStore.getState();
+    s.setNerThreshold(0.9);
+    s.addNerCandidates(0, [
+      { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.8 },
+      { category: 'private_person', bbox: { x: 20, y: 0, w: 10, h: 10 }, score: 0.95 },
+    ]);
+
+    const state = useAppStore.getState();
+    expect(state.candidates.filter((c) => c.source === 'ner')).toHaveLength(2);
+    const boxes = Object.values(state.boxes);
+    expect(boxes).toHaveLength(2);
+    expect(boxes.every((b) => b.source === 'ner')).toBe(true);
+    expect(boxes.every((b) => b.enabled === false)).toBe(true);
+  });
+
+  it('NER 카테고리를 켜면 해당 NER 박스가 enabled 된다', () => {
+    const s = useAppStore.getState();
+    s.addNerCandidates(0, [
+      { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.99 },
+    ]);
+    const id = Object.keys(useAppStore.getState().boxes)[0]!;
+    expect(useAppStore.getState().boxes[id]?.enabled).toBe(false);
+
+    s.toggleCategory('private_person');
+
+    expect(useAppStore.getState().boxes[id]?.enabled).toBe(true);
+  });
 });

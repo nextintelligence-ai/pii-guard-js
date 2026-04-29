@@ -6,6 +6,7 @@ import type { DetectionCategory, RedactionBox } from '@/types/domain';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,8 +14,6 @@ import {
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
-// NER 5 카테고리는 Task 4.1 에서 패널 UI 가 본격 노출. 현재는 타입 일관성만 유지하고
-// CATS 배열에는 포함하지 않아 패널에 렌더되지 않는다.
 const LABELS: Record<DetectionCategory, string> = {
   rrn: '주민등록번호',
   phone: '전화번호',
@@ -23,11 +22,11 @@ const LABELS: Record<DetectionCategory, string> = {
   businessNo: '사업자번호',
   card: '카드번호',
   address: '주소',
-  private_person: '이름',
-  private_address: '주소(NER)',
+  private_person: '사람 이름',
+  private_address: '주소',
   private_url: 'URL',
   private_date: '날짜',
-  secret: '기밀',
+  secret: '시크릿/키',
 };
 
 const CAT_COLORS: Record<DetectionCategory, string> = {
@@ -45,7 +44,7 @@ const CAT_COLORS: Record<DetectionCategory, string> = {
   secret: 'bg-zinc-700',
 };
 
-const CATS: DetectionCategory[] = [
+const REGEX_CATEGORIES: DetectionCategory[] = [
   'rrn',
   'phone',
   'email',
@@ -55,17 +54,30 @@ const CATS: DetectionCategory[] = [
   'address',
 ];
 
-type AutoBox = RedactionBox & { category: DetectionCategory };
+const NER_CATEGORIES: DetectionCategory[] = [
+  'private_person',
+  'private_address',
+  'private_url',
+  'private_date',
+  'secret',
+];
+
+type DetectedBox = RedactionBox & {
+  category: DetectionCategory;
+  source: 'auto' | 'ner';
+};
 type ManualBox = RedactionBox & { source: 'manual-rect' | 'text-select' };
 
 export function CandidatePanel() {
-  const autoBoxes = useAppStore(
+  const detectedBoxes = useAppStore(
     useShallow((s) =>
       Object.values(s.boxes).filter(
-        (b): b is AutoBox => b.source === 'auto' && b.category !== undefined,
+        (b): b is DetectedBox =>
+          (b.source === 'auto' || b.source === 'ner') && b.category !== undefined,
       ),
     ),
   );
+  const candidates = useAppStore(useShallow((s) => s.candidates));
   const manualBoxes = useAppStore(
     useShallow((s) =>
       Object.values(s.boxes).filter(
@@ -74,14 +86,34 @@ export function CandidatePanel() {
     ),
   );
   const cats = useAppStore((s) => s.categoryEnabled);
+  const nerThreshold = useAppStore((s) => s.nerThreshold);
+  const setNerThreshold = useAppStore((s) => s.setNerThreshold);
   const toggle = useAppStore((s) => s.toggleBox);
   const toggleCat = useAppStore((s) => s.toggleCategory);
   const goToPage = useAppStore((s) => s.goToPage);
   const focusBox = useAppStore((s) => s.focusBox);
   const deleteBox = useAppStore((s) => s.deleteBox);
   const selectedBoxId = useAppStore((s) => s.selectedBoxId);
+  const showNerUi = import.meta.env.MODE === 'nlp';
+  const candidateById = useMemo(
+    () => new Map(candidates.map((c) => [c.id, c])),
+    [candidates],
+  );
+  const regexBoxes = useMemo(
+    () => detectedBoxes.filter((b) => b.source === 'auto'),
+    [detectedBoxes],
+  );
+  const nerBoxes = useMemo(
+    () =>
+      detectedBoxes.filter((b) => {
+        if (b.source !== 'ner') return false;
+        const confidence = candidateById.get(b.id)?.confidence ?? 0;
+        return confidence >= nerThreshold;
+      }),
+    [candidateById, detectedBoxes, nerThreshold],
+  );
 
-  const totalAuto = autoBoxes.length;
+  const totalAuto = regexBoxes.length + (showNerUi ? nerBoxes.length : 0);
 
   return (
     <div className="space-y-4">
@@ -94,15 +126,17 @@ export function CandidatePanel() {
               : '발견된 개인정보가 없어요. 필요하면 PDF에서 직접 박스를 그려도 돼요'}
           </p>
         </div>
-        {CATS.map((cat) => {
-          const items = autoBoxes.filter((b) => b.category === cat);
+        {REGEX_CATEGORIES.map((cat) => {
+          const items = regexBoxes.filter((b) => b.category === cat);
           return (
             <CategoryGroup
               key={cat}
               cat={cat}
+              source="regex"
               items={items}
               enabled={cats[cat]}
               selectedBoxId={selectedBoxId}
+              candidateById={candidateById}
               onToggleCategory={() => toggleCat(cat)}
               onToggleBox={toggle}
               onGoTo={goToPage}
@@ -113,6 +147,54 @@ export function CandidatePanel() {
             />
           );
         })}
+        {showNerUi && (
+          <div className="space-y-2 pt-1">
+            <div className="rounded-md border bg-muted/30 px-3 py-2">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium">NER 신뢰도</span>
+                <span className="text-xs text-muted-foreground">
+                  신뢰도 ≥ {nerThreshold.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                min={0.5}
+                max={0.95}
+                step={0.05}
+                value={[nerThreshold]}
+                onValueChange={([v]) => {
+                  if (typeof v === 'number') setNerThreshold(v);
+                }}
+                aria-label="NER 신뢰도 임계값"
+              />
+            </div>
+            {nerBoxes.length === 0 && (
+              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                NER 모델을 로드하면 사람 이름·주소·URL·날짜·시크릿 자동 검출이 추가됩니다.
+              </div>
+            )}
+            {NER_CATEGORIES.map((cat) => {
+              const items = nerBoxes.filter((b) => b.category === cat);
+              return (
+                <CategoryGroup
+                  key={cat}
+                  cat={cat}
+                  source="ner"
+                  items={items}
+                  enabled={cats[cat]}
+                  selectedBoxId={selectedBoxId}
+                  candidateById={candidateById}
+                  onToggleCategory={() => toggleCat(cat)}
+                  onToggleBox={toggle}
+                  onGoTo={goToPage}
+                  onFocusBox={(id, page) => {
+                    goToPage(page);
+                    focusBox(id);
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="space-y-2">
@@ -142,9 +224,11 @@ export function CandidatePanel() {
 
 type GroupProps = {
   cat: DetectionCategory;
-  items: AutoBox[];
+  source: 'regex' | 'ner';
+  items: DetectedBox[];
   enabled: boolean;
   selectedBoxId: string | null;
+  candidateById: Map<string, { confidence: number }>;
   onToggleCategory(): void;
   onToggleBox(id: string): void;
   onGoTo(page: number): void;
@@ -153,9 +237,11 @@ type GroupProps = {
 
 function CategoryGroup({
   cat,
+  source,
   items,
   enabled,
   selectedBoxId,
+  candidateById,
   onToggleCategory,
   onToggleBox,
   onGoTo,
@@ -164,7 +250,7 @@ function CategoryGroup({
   const [open, setOpen] = useState(items.length > 0 && items.length <= 30);
 
   const byPage = useMemo(() => {
-    const map = new Map<number, AutoBox[]>();
+    const map = new Map<number, DetectedBox[]>();
     for (const b of items) {
       const arr = map.get(b.pageIndex) ?? [];
       arr.push(b);
@@ -189,6 +275,7 @@ function CategoryGroup({
           <Label htmlFor={id} className="flex-1 cursor-pointer text-sm">
             {LABELS[cat]}
           </Label>
+          <SourceBadge source={source} />
           <Badge variant="secondary">{items.length}</Badge>
           <CollapsibleTrigger asChild>
             <button
@@ -217,6 +304,7 @@ function CategoryGroup({
                 <ul className="ml-2 mt-1 space-y-1">
                   {group.map((b) => {
                     const isSelected = selectedBoxId === b.id;
+                    const confidence = candidateById.get(b.id)?.confidence;
                     return (
                       <li key={b.id}>
                         <button
@@ -241,6 +329,11 @@ function CategoryGroup({
                           <span className="text-xs font-normal text-muted-foreground">
                             박스 #{b.id.slice(-6)}
                           </span>
+                          {b.source === 'ner' && typeof confidence === 'number' && (
+                            <span className="ml-auto text-[11px] text-muted-foreground">
+                              {confidence.toFixed(2)}
+                            </span>
+                          )}
                         </button>
                       </li>
                     );
@@ -253,6 +346,11 @@ function CategoryGroup({
       </Collapsible>
     </div>
   );
+}
+
+function SourceBadge({ source }: { source: 'regex' | 'ner' }) {
+  if (source === 'regex') return <Badge variant="secondary">정규식</Badge>;
+  return <Badge variant="warning">NER · 검수 필요</Badge>;
 }
 
 type ManualGroupProps = {

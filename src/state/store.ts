@@ -115,12 +115,10 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   },
   addNerCandidates(pageIndex, boxes) {
     if (boxes.length === 0) return;
-    const threshold = get().nerThreshold;
     const enabledMap = get().categoryEnabled;
     const newCandidates: Candidate[] = [];
     const newBoxes: Record<string, RedactionBox> = {};
     for (const b of boxes) {
-      if (b.score < threshold) continue;
       const id = createId();
       const category = b.category as DetectionCategory;
       const bbox: Bbox = [
@@ -145,7 +143,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
         id,
         pageIndex,
         bbox,
-        source: 'auto',
+        source: 'ner',
         category,
         enabled: isEnabled,
       };
@@ -211,7 +209,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
       const updated: Record<string, RedactionBox> = { ...s.boxes };
       for (const id in updated) {
         const box = updated[id]!;
-        if (box.source === 'auto' && box.category === cat) {
+        if ((box.source === 'auto' || box.source === 'ner') && box.category === cat) {
           updated[id] = { ...box, enabled: next };
         }
       }

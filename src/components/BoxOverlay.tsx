@@ -306,7 +306,8 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
           meta.rotation,
         );
         const r = pendingFor(b.id) ?? baseRect;
-        const key = b.source === 'auto' && b.category ? b.category : 'manual';
+        const key =
+          (b.source === 'auto' || b.source === 'ner') && b.category ? b.category : 'manual';
         const fill = b.enabled ? COLORS[key] : 'transparent';
         const stroke = STROKE[key];
         const isSelected = selectedBoxId === b.id;

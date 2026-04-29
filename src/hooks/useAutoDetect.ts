@@ -32,7 +32,10 @@ export function useAutoDetect() {
         };
         remaining[c.id] = box;
       }
-      useAppStore.setState({ candidates, boxes: remaining });
+      useAppStore.setState({
+        candidates: [...s.candidates.filter((c) => c.source === 'ner'), ...candidates],
+        boxes: remaining,
+      });
     })();
     return () => {
       cancelled = true;

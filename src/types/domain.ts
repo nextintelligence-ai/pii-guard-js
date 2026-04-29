@@ -32,7 +32,7 @@ export type Candidate = {
   source: CandidateSource;
 };
 
-export type RedactionBoxSource = 'auto' | 'text-select' | 'manual-rect';
+export type RedactionBoxSource = 'auto' | 'ner' | 'text-select' | 'manual-rect';
 
 export type RedactionBox = {
   id: string;
