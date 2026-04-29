@@ -1,4 +1,12 @@
 
+## Architecture Diagrams
+
+| Diagram | File |
+|---------|------|
+| AWS Infrastructure Architecture | [`docs/architecture/aws-infrastructure.png`](../../docs/architecture/aws-infrastructure.png) |
+
+> Source drawio: `docs/architecture/aws-infrastructure.drawio`
+
 ## AWS Infrastructure (infra/pulumi/)
 
 Pulumi stack name: `pii-guard-prod`

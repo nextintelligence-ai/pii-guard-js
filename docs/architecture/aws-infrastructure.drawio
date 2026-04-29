@@ -1,102 +1,56 @@
-<mxfile host="app.diagrams.net">
-  <diagram name="AWS Infrastructure" id="pii-guard-infra">
-    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="800">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-
-        <!-- P2 Account Container -->
-        <mxCell id="p2" value="P2 Account · officemail-prod · 677276107201 · ap-northeast-2"
-          style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=13;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#CD6732;fillColor=#FDF0E6;verticalAlign=top;align=center;spacingTop=5;fontColor=#CD6732;dashed=0;"
-          vertex="1" parent="1">
-          <mxGeometry x="200" y="80" width="580" height="480" as="geometry" />
-        </mxCell>
-
-        <!-- P1 Account Container -->
-        <mxCell id="p1" value="P1 Account · 9folders · 037684266277"
-          style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=13;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#1A7B3A;fillColor=#E9F5EE;verticalAlign=top;align=center;spacingTop=5;fontColor=#1A7B3A;dashed=0;"
-          vertex="1" parent="1">
-          <mxGeometry x="900" y="160" width="310" height="310" as="geometry" />
-        </mxCell>
-
-        <!-- CloudFront (P2) -->
-        <mxCell id="cf" value="CloudFront&#xa;pii-guard-local.officeagent.kr"
-          style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#B783FF;gradientDirection=north;fillColor=#5A30B5;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;"
-          vertex="1" parent="p2">
-          <mxGeometry x="110" y="160" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- S3 Bucket (P2) -->
-        <mxCell id="s3" value="S3 Bucket&#xa;officeagent-pii-guard-prod"
-          style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#7AA116;gradientDirection=north;fillColor=#3F8624;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;"
-          vertex="1" parent="p2">
-          <mxGeometry x="390" y="160" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- ACM Certificate (P2, us-east-1) -->
-        <mxCell id="acm" value="ACM Certificate&#xa;pii-guard-local.officeagent.kr&#xa;(us-east-1)"
-          style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#C7131F;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.certificate_manager_3;"
-          vertex="1" parent="p2">
-          <mxGeometry x="110" y="340" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- Route 53 (P1) -->
-        <mxCell id="r53" value="Route 53&#xa;officeagent.kr&#xa;Z04331861UDPHXIBOW1BF"
-          style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#B783FF;gradientDirection=north;fillColor=#5A30B5;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;"
-          vertex="1" parent="p1">
-          <mxGeometry x="130" y="80" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- IAM Role Cross-account (P1) -->
-        <mxCell id="iam-cross" value="IAM Role&#xa;pii-guard-cross-account-route53&#xa;(ExternalId)"
-          style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#C7131F;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;"
-          vertex="1" parent="p1">
-          <mxGeometry x="130" y="220" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- User Browser (external) -->
-        <mxCell id="user" value="User Browser"
-          style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#232F3E;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;"
-          vertex="1" parent="1">
-          <mxGeometry x="80" y="230" width="60" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- Edge 1: User → CloudFront (HTTPS) -->
-        <mxCell id="e1" value="HTTPS"
-          style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#5A30B5;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;"
-          edge="1" parent="1" source="user" target="cf">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-        <!-- Edge 2: CloudFront → S3 (OAC SigV4) -->
-        <mxCell id="e2" value="OAC (SigV4)"
-          style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#3F8624;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;"
-          edge="1" parent="1" source="cf" target="s3">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-        <!-- Edge 3: Route53 → CloudFront (A/AAAA alias) -->
-        <mxCell id="e3" value="A/AAAA alias"
-          style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#5A30B5;exitX=0;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;"
-          edge="1" parent="1" source="r53" target="cf">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-        <!-- Edge 4: ACM → Route53 (DNS validation, cross-account) -->
-        <mxCell id="e4" value="DNS validation (cross-account)"
-          style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#C7131F;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;"
-          edge="1" parent="1" source="acm" target="r53">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-        <!-- Edge 5: IAM Cross → Route53 (ChangeRecordSets) -->
-        <mxCell id="e5" value="ChangeRecordSets"
-          style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#1A7B3A;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;"
-          edge="1" parent="1" source="iam-cross" target="r53">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-      </root>
-    </mxGraphModel>
-  </diagram>
+<mxfile host="65bd71144e">
+    <diagram name="AWS Infrastructure" id="pii-guard-infra">
+        <mxGraphModel dx="1217" dy="883" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="800" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="p2" value="ACCOUNT_ID: 677276107201" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=13;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#CD6732;fillColor=#FDF0E6;verticalAlign=top;align=center;spacingTop=5;fontColor=#CD6732;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="80" width="580" height="480" as="geometry"/>
+                </mxCell>
+                <mxCell id="cf" value="CloudFront&lt;br&gt;(pii-guard-local.officeagent.kr)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#B783FF;gradientDirection=north;fillColor=#5A30B5;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;" parent="p2" vertex="1">
+                    <mxGeometry x="110" y="160" width="60" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" value="S3 Bucket&lt;br&gt;(officeagent-pii-guard-prod)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#7AA116;gradientDirection=north;fillColor=#3F8624;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" parent="p2" vertex="1">
+                    <mxGeometry x="390" y="160" width="60" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="acm" value="ACM Certificate&lt;br&gt;(pii-guard-local.officeagent.kr)" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#C7131F;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.certificate_manager_3;" parent="p2" vertex="1">
+                    <mxGeometry x="110" y="340" width="60" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="p1" value="ACCOUNT_ID: 037684266277" style="outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=13;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#1A7B3A;fillColor=#E9F5EE;verticalAlign=top;align=center;spacingTop=5;fontColor=#1A7B3A;dashed=0;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="160" width="310" height="310" as="geometry"/>
+                </mxCell>
+                <mxCell id="r53" value="Route 53&lt;br&gt;(&lt;span style=&quot;color: rgb(63, 63, 63); background-color: transparent;&quot;&gt;officeagent.kr)&lt;/span&gt;" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#B783FF;gradientDirection=north;fillColor=#5A30B5;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;" parent="p1" vertex="1">
+                    <mxGeometry x="140" y="125" width="60" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="user" value="User Browser" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#232F3E;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="230" width="60" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" value="HTTPS" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#5A30B5;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="user" target="cf" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" value="OAC (SigV4)" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#3F8624;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="cf" target="s3" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="480" y="240"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e3" value="A/AAAA alias" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#5A30B5;exitX=0;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="r53" target="cf" edge="1">
+                    <mxGeometry x="0.0014" relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="700" y="400"/>
+                        </Array>
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e4" value="DNS validation (cross-account)" style="endArrow=classic;html=1;strokeWidth=2;strokeColor=#C7131F;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="acm" target="r53" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="710" y="450"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
 </mxfile>
