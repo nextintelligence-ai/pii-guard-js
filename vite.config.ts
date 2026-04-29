@@ -54,7 +54,12 @@ function stripMupdfWasmAsset(): Plugin {
  * 리터럴을 비파괴적으로 무력화 (jsdelivr → about:blank/) 한다. configureNerEnv 의 override 가
  * 어차피 먼저 적용되므로 이 dead path 가 실행되어도 결과는 동일하다.
  *
- * 패턴이 변하면 transformers.js 가 업그레이드된 것이므로 빌드를 실패시켜 회귀를 명시화한다.
+ * 회귀 가드 메모: mupdf / onnx-proxy 와 달리 본 플러그인은 needle 미스매치 시 silent
+ * return 한다. 이유는 `@huggingface/transformers` 패키지 안의 여러 모듈을 `transform`
+ * 이 거치므로 (id 필터가 패키지 단위라 넓다) 패턴이 없는 모듈도 정상이기 때문이다.
+ * transformers.js 업그레이드로 jsdelivr 리터럴이 사라지거나 형태가 바뀌어 strip 이
+ * 동작하지 않게 되면, postbuild 의 `scripts/verify-no-external.mjs` 가 산출 HTML 에서
+ * jsdelivr URL 을 발견해 빌드를 실패시킨다 (회귀 가드는 산출 단계에서 명시화된다).
  */
 function stripOnnxJsdelivrDefault(): Plugin {
   // transformers.js 4.2 의 minified template literal 시그니처. 버전 부분(`${ONNX_ENV.versions.web}`)
@@ -194,14 +199,6 @@ function deferredWasmModuleWorker(): Plugin {
 }
 
 /**
- * NLP 모드 dev 서버에서 로컬 모델 디렉토리를 정적 서빙한다.
- *
- * transformers.js 는 `pipeline(task, modelId, ...)` 호출 시 fetch 로 `${origin}/${localModelPath}/${modelId}/...`
- * 을 요청한다. PoC 단계에서는 사용자가 받아둔 폴더 (기본 `~/Downloads/privacy-filter`,
- * `POC_MODEL_DIR` 로 override) 를 `/models/privacy-filter/` 로 mount 해 표준 fetch 흐름으로
- * 동작시킨다. dev 서버에서만 활성. 빌드(`build:nlp`) 산출물에는 영향 없음.
- */
-/**
  * NLP 모드 dev 서버에서 onnxruntime-web 의 wasm / .mjs runtime 파일을 로컬 서빙한다.
  *
  * transformers.js 4.2 의 onnxruntime-web 백엔드는 기본 `wasmPaths` 가 jsdelivr CDN 이라
@@ -245,6 +242,14 @@ function ortRuntimeServer(): Plugin {
   };
 }
 
+/**
+ * NLP 모드 dev 서버에서 로컬 모델 디렉토리를 정적 서빙한다.
+ *
+ * transformers.js 는 `pipeline(task, modelId, ...)` 호출 시 fetch 로 `${origin}/${localModelPath}/${modelId}/...`
+ * 을 요청한다. PoC 단계에서는 사용자가 받아둔 폴더 (기본 `~/Downloads/privacy-filter`,
+ * `POC_MODEL_DIR` 로 override) 를 `/models/privacy-filter/` 로 mount 해 표준 fetch 흐름으로
+ * 동작시킨다. dev 서버에서만 활성. 빌드(`build:nlp`) 산출물에는 영향 없음.
+ */
 function pocModelServer(): Plugin {
   const modelDir = process.env.POC_MODEL_DIR ?? path.join(os.homedir(), 'Downloads', 'privacy-filter');
   const URL_PREFIX = '/models/privacy-filter/';
