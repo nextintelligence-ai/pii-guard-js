@@ -1,6 +1,16 @@
 import { readFile } from 'node:fs/promises';
 
-const f = await readFile('dist/index.html', 'utf8');
+// 기본은 `dist/index.html` 이지만 NLP 모드 빌드(`dist-nlp/index.html`) 등 다른 산출물 검증을 위해
+// `--target=<path>` 인자로 검사 대상 파일을 지정할 수 있다.
+function parseArg(name) {
+  const prefix = `--${name}=`;
+  const found = process.argv.find((arg) => arg.startsWith(prefix));
+  return found ? found.slice(prefix.length) : null;
+}
+
+const targetRel = parseArg('target') ?? 'dist/index.html';
+
+const f = await readFile(targetRel, 'utf8');
 
 // XMLNS / XHTML / SVG / MathML namespaces 는 inline SVG/XML spec URI 로 네트워크 호출이 아니다.
 // React production runtime 에 minified 로 박혀있는 react.dev/errors/ 도 string concat 일 뿐
@@ -27,5 +37,5 @@ if (matches.length > 0) {
   process.exit(1);
 }
 console.log(
-  `OK — 외부 URL 0개 (검사 ${f.length} bytes, ${(f.length / 1024 / 1024).toFixed(1)} MB)`,
+  `OK — ${targetRel} 외부 URL 0개 (검사 ${f.length} bytes, ${(f.length / 1024 / 1024).toFixed(1)} MB)`,
 );

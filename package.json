@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:nlp": "vite --mode nlp",
     "build": "tsc -b && vite build",
     "build:multi": "tsc -b && vite build --mode multi",
+    "build:nlp": "tsc -b && vite build --mode nlp",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,10 +17,13 @@
     "prebuild": "node scripts/embed-wasm.mjs",
     "postbuild": "node scripts/verify-no-external.mjs && node scripts/verify-build-size.mjs",
     "prebuild:multi": "node scripts/embed-wasm.mjs",
+    "prebuild:nlp": "node scripts/embed-wasm.mjs",
+    "postbuild:nlp": "node scripts/verify-no-external.mjs --target=dist-nlp/index-nlp.html && node scripts/verify-build-size.mjs --budget=35 --target=dist-nlp/index-nlp.html",
     "predev": "node scripts/embed-wasm.mjs",
     "pretest": "node scripts/embed-wasm.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",

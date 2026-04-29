@@ -110,14 +110,27 @@ function deferredWasmModuleWorker(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const isMulti = mode === 'multi';
+  const isNlp = mode === 'nlp';
+  // NLP 모드는 별도 진입 HTML(`index-nlp.html`) 을 입력으로 받아 `dist-nlp/` 에 산출한다.
+  // 기존 단일 파일/플러그인 파이프라인은 그대로 적용해 file:// 더블클릭 동작 가정을 유지.
+  // rollup `input` 을 `{ index: ... }` 객체로 주면 산출 HTML 이 입력 basename 대신 키 이름
+  // (`index.html`) 으로 emit 되어 `dist-nlp/index.html` 통일 — postbuild 의 verify 스크립트가
+  // 모드에 무관하게 동일 경로를 검사할 수 있다.
+  const inputEntry: Record<string, string> = isNlp
+    ? { index: path.resolve(__dirname, 'index-nlp.html') }
+    : { index: path.resolve(__dirname, 'index.html') };
   return {
     plugins: [react(), stripMupdfWasmAsset(), deferredWasmModuleWorker(), ...(isMulti ? [] : [viteSingleFile()])],
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
     // React DOM 19 는 Navigation API 가 있으면 synthetic navigation 을 시작한다.
     // 단일 HTML 을 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
     // 차단하므로, 이 앱에서는 전역 navigation 참조를 번들 시점에 제거한다.
+    //
+    // NLP 모드에서는 transformers.js 가 huggingface hub 로 모델을 fetch 하지 않도록
+    // `globalThis.__NER_ALLOW_REMOTE__` 를 false 로 컴파일 타임 가드한다.
     define: {
       navigation: 'undefined',
+      'globalThis.__NER_ALLOW_REMOTE__': JSON.stringify(false),
     },
     // mupdf 의 ESM 엔트리는 top-level `await import("node:fs")` / `await import("module")`
     // 를 포함한다. esbuild dep 사전 번들링이 이 Node.js builtin 을 처리하지 못해
@@ -142,11 +155,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: {
-      outDir: isMulti ? 'dist-multi' : 'dist',
+      outDir: isNlp ? 'dist-nlp' : isMulti ? 'dist-multi' : 'dist',
       target: 'es2022',
       cssCodeSplit: false,
       assetsInlineLimit: isMulti ? 4096 : 100_000_000,
       rollupOptions: {
+        input: inputEntry,
         output: { inlineDynamicImports: !isMulti },
       },
     },
