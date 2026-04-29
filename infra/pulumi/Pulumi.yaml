@@ -1,0 +1,6 @@
+name: officeagent-pii-guard
+description: pii-guard-js 정적 사이트 AWS 배포 (S3 + CloudFront)
+runtime:
+  name: nodejs
+  options:
+    packagemanager: npm
