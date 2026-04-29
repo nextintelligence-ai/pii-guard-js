@@ -76,4 +76,34 @@ describe('AppStore', () => {
 
     expect(useAppStore.getState().boxes[id]?.enabled).toBe(true);
   });
+
+  it('NER 카테고리를 켤 때 현재 신뢰도 기준 미만 박스는 enabled 하지 않는다', () => {
+    const s = useAppStore.getState();
+    s.setNerThreshold(0.9);
+    s.addNerCandidates(0, [
+      { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.8 },
+      { category: 'private_person', bbox: { x: 20, y: 0, w: 10, h: 10 }, score: 0.95 },
+    ]);
+
+    s.toggleCategory('private_person');
+
+    const boxes = Object.values(useAppStore.getState().boxes).sort((a, b) => a.bbox[0] - b.bbox[0]);
+    expect(boxes[0]?.enabled).toBe(false);
+    expect(boxes[1]?.enabled).toBe(true);
+  });
+
+  it('NER 신뢰도를 높이면 기준 미만으로 내려간 enabled 박스를 적용 대상에서 제외한다', () => {
+    const s = useAppStore.getState();
+    s.addNerCandidates(0, [
+      { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.8 },
+      { category: 'private_person', bbox: { x: 20, y: 0, w: 10, h: 10 }, score: 0.95 },
+    ]);
+    s.toggleCategory('private_person');
+
+    s.setNerThreshold(0.9);
+
+    const boxes = Object.values(useAppStore.getState().boxes).sort((a, b) => a.bbox[0] - b.bbox[0]);
+    expect(boxes[0]?.enabled).toBe(false);
+    expect(boxes[1]?.enabled).toBe(true);
+  });
 });

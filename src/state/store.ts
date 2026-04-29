@@ -22,6 +22,7 @@ export type DocState =
 
 type State = {
   doc: DocState;
+  docEpoch: number;
   currentPage: number;
   candidates: Candidate[];
   boxes: Record<string, RedactionBox>;
@@ -57,6 +58,7 @@ type Actions = {
 
 const initial: State = {
   doc: { kind: 'empty' },
+  docEpoch: 0,
   currentPage: 0,
   candidates: [],
   boxes: {},
@@ -116,6 +118,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   addNerCandidates(pageIndex, boxes) {
     if (boxes.length === 0) return;
     const enabledMap = get().categoryEnabled;
+    const threshold = get().nerThreshold;
     const newCandidates: Candidate[] = [];
     const newBoxes: Record<string, RedactionBox> = {};
     for (const b of boxes) {
@@ -138,7 +141,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
       });
       // categoryEnabled[category] 가 true 일 때만 박스를 enabled 로 추가.
       // 신규 NER 카테고리는 기본 false 라 사용자가 켤 때까지 적용되지 않는다.
-      const isEnabled = enabledMap[category] ?? false;
+      const isEnabled = (enabledMap[category] ?? false) && b.score >= threshold;
       newBoxes[id] = {
         id,
         pageIndex,
@@ -207,10 +210,16 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     const next = !get().categoryEnabled[cat];
     set((s) => {
       const updated: Record<string, RedactionBox> = { ...s.boxes };
+      const confidenceById = buildNerConfidenceMap(s.candidates);
       for (const id in updated) {
         const box = updated[id]!;
-        if ((box.source === 'auto' || box.source === 'ner') && box.category === cat) {
+        if (box.source === 'auto' && box.category === cat) {
           updated[id] = { ...box, enabled: next };
+        } else if (box.source === 'ner' && box.category === cat) {
+          updated[id] = {
+            ...box,
+            enabled: next && isNerBoxAboveThreshold(box, confidenceById, s.nerThreshold),
+          };
         }
       }
       return {
@@ -247,7 +256,18 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     set((s) => ({ selectedBoxId: id, focusNonce: s.focusNonce + 1 }));
   },
   setNerThreshold(v) {
-    set({ nerThreshold: v });
+    set((s) => {
+      const confidenceById = buildNerConfidenceMap(s.candidates);
+      const boxes: Record<string, RedactionBox> = {};
+      for (const id in s.boxes) {
+        const box = s.boxes[id]!;
+        boxes[id] =
+          box.source === 'ner' && !isNerBoxAboveThreshold(box, confidenceById, v)
+            ? { ...box, enabled: false }
+            : box;
+      }
+      return { nerThreshold: v, boxes };
+    });
   },
   setNerProgress(p) {
     set({ nerProgress: p });
@@ -268,6 +288,23 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   },
   reset() {
     undoStack.clear();
-    set({ ...initial });
+    set({ ...initial, docEpoch: get().docEpoch + 1 });
   },
 }));
+
+function buildNerConfidenceMap(candidates: Candidate[]): Map<string, number> {
+  return new Map(
+    candidates
+      .filter((candidate) => candidate.source === 'ner')
+      .map((candidate) => [candidate.id, candidate.confidence]),
+  );
+}
+
+function isNerBoxAboveThreshold(
+  box: RedactionBox,
+  confidenceById: Map<string, number>,
+  threshold: number,
+): boolean {
+  if (box.source !== 'ner') return true;
+  return (confidenceById.get(box.id) ?? 0) >= threshold;
+}
