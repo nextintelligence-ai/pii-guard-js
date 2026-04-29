@@ -18,7 +18,7 @@
     "postbuild": "node scripts/verify-no-external.mjs && node scripts/verify-build-size.mjs",
     "prebuild:multi": "node scripts/embed-wasm.mjs",
     "prebuild:nlp": "node scripts/embed-wasm.mjs",
-    "postbuild:nlp": "node scripts/verify-no-external.mjs --target=dist-nlp/index-nlp.html && node scripts/verify-build-size.mjs --budget=35 --target=dist-nlp/index-nlp.html",
+    "postbuild:nlp": "node scripts/verify-no-external.mjs --target=dist-nlp/index-nlp.html && node scripts/verify-build-size.mjs --budget=70 --target=dist-nlp/index-nlp.html",
     "predev": "node scripts/embed-wasm.mjs",
     "pretest": "node scripts/embed-wasm.mjs"
   },

@@ -39,6 +39,89 @@ function stripMupdfWasmAsset(): Plugin {
   };
 }
 
+/**
+ * transformers.js 4.2 의 `src/backends/onnx.js` 는 onnxruntime-web 백엔드 로드 시점에
+ * 다음 기본 wasmPaths 를 세팅한다 (https://cdn.jsdelivr.net/npm/onnxruntime-web@<version>/dist/).
+ *
+ *   const wasmPathPrefix = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ONNX_ENV.versions.web}/dist/`;
+ *   ONNX_ENV.wasm.wasmPaths = ... { mjs: `${wasmPathPrefix}...`, wasm: `${wasmPathPrefix}...` }
+ *
+ * 우리는 `configureNerEnv()` 에서 `wasmPaths = '/ort/'` 로 덮어써 실제 런타임 fetch 는
+ * jsdelivr 로 가지 않지만, 위 jsdelivr 템플릿 리터럴이 산출 HTML 에 dead-string 으로 남아
+ * `verify-no-external` 가 차단한다 (외부 네트워크 0 정책의 string-scan 가드).
+ *
+ * 정책상 jsdelivr URL 은 allow list 에 절대 추가하지 않는다. 따라서 mupdf 처럼 빌드 시점에
+ * 리터럴을 비파괴적으로 무력화 (jsdelivr → about:blank/) 한다. configureNerEnv 의 override 가
+ * 어차피 먼저 적용되므로 이 dead path 가 실행되어도 결과는 동일하다.
+ *
+ * 패턴이 변하면 transformers.js 가 업그레이드된 것이므로 빌드를 실패시켜 회귀를 명시화한다.
+ */
+function stripOnnxJsdelivrDefault(): Plugin {
+  // transformers.js 4.2 의 minified template literal 시그니처. 버전 부분(`${ONNX_ENV.versions.web}`)
+  // 은 minify 후 변수명이 바뀌므로 안정적인 prefix 만 매칭.
+  const needle = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@';
+  return {
+    name: 'strip-onnx-jsdelivr-default',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.includes('@huggingface/transformers')) return null;
+      if (!code.includes(needle)) return null;
+      // 같은 파일에 여러 번 등장할 수 있으므로 모두 치환. about:blank/ 는 절대 URL 이지만
+      // verify-no-external 의 https?:\/\/ 정규식에 걸리지 않고 fetch 시도해도 외부로 나가지 않는다.
+      return {
+        code: code.split(needle).join('about:blank/onnxruntime-web@'),
+        map: null,
+      };
+    },
+  };
+}
+
+/**
+ * onnxruntime-web 의 `ort.webgpu.bundle.min.mjs` 에는 wasm 파일을 가리키는 `new URL("ort-wasm...wasm",
+ * import.meta.url).href` 패턴이 두 군데 등장한다:
+ *
+ *   1. 메인 스레드의 `WebAssembly.instantiateStreaming` fallback — `locateFile` 도 없고 `wasmPaths`
+ *      도 없을 때 wasm 을 직접 fetch 하는 경로.
+ *   2. **proxy worker 의 `init-wasm` 메시지 wasmPaths fallback** — proxy 모드에서 worker 에 보낼
+ *      wasmPaths 가 비어있고 SharedArrayBuffer 가 없을 때 fallback.
+ *
+ * Vite 의 asset emit 은 두 패턴을 각각 별도 자산으로 처리해 동일한 wasm 을 base64 dataURL 로
+ * **두 번** 인라인한다 (총 약 60MB → 사이즈 예산 70MB 가까이 압박).
+ *
+ * `configureNerEnv()` 가 항상 `wasm.wasmPaths = '/ort/'` 를 미리 세팅하므로 (2) 의 분기 (`!i.in.wasm.wasmPaths`)
+ * 는 런타임에서 절대 truthy 가 되지 않는다. 따라서 (2) 의 `new URL(...)` 표현식 자체를
+ * 빈 문자열 리터럴로 치환해 Vite 의 자산 emit 을 회피한다 — 산출 사이즈가 약 30MB 감소한다.
+ *
+ * (1) 은 그대로 둔다. 이 분기는 본 빌드에서 file:// 더블클릭 동작 시 wasmPaths 가 dev 와 달리
+ * 절대 fetch 가 안 되므로 (file:// 의 Same Origin Policy) wasm dataURL 이 유일한 inline 경로다.
+ *
+ * 패턴이 변하면 onnxruntime-web 가 업그레이드된 것이므로 빌드를 실패시켜 회귀를 명시화한다.
+ */
+function stripOnnxProxyWasmDataUrl(): Plugin {
+  // proxy worker 의 init-wasm fallback. minified 변수명(`i`, `s`, `tn`)은 버전에 따라 바뀔 수 있어
+  // 안정 부분만 매칭. import.meta.url 을 쓰는 wasm new URL 은 본 패턴 1건뿐이라 부수효과 없음.
+  const needle =
+    '.in.wasm.wasmPaths={wasm:new URL("ort-wasm-simd-threaded.asyncify.wasm",import.meta.url).href}';
+  const replacement = '.in.wasm.wasmPaths={wasm:""}';
+  return {
+    name: 'strip-onnx-proxy-wasm-dataurl',
+    enforce: 'pre',
+    transform(code, id) {
+      if (!id.includes('ort.webgpu.bundle.min.mjs')) return null;
+      if (!code.includes(needle)) {
+        this.error(
+          `strip-onnx-proxy-wasm-dataurl: 패턴을 찾지 못했습니다. onnxruntime-web 가 업그레이드된 것 같습니다. ` +
+            `'${needle}' 가 ort.webgpu.bundle.min.mjs 에 더 이상 존재하지 않으면 빌드 사이즈 예산이 깨집니다.`,
+        );
+      }
+      return {
+        code: code.replace(needle, replacement),
+        map: null,
+      };
+    },
+  };
+}
+
 function deferredWasmModuleWorker(): Plugin {
   const needle = 'export default function WorkerWrapper(options) {\n            let objURL;';
   const replacement = `function createFileProtocolModuleWorker(encodedJs, options) {
@@ -118,6 +201,50 @@ function deferredWasmModuleWorker(): Plugin {
  * `POC_MODEL_DIR` 로 override) 를 `/models/privacy-filter/` 로 mount 해 표준 fetch 흐름으로
  * 동작시킨다. dev 서버에서만 활성. 빌드(`build:nlp`) 산출물에는 영향 없음.
  */
+/**
+ * NLP 모드 dev 서버에서 onnxruntime-web 의 wasm / .mjs runtime 파일을 로컬 서빙한다.
+ *
+ * transformers.js 4.2 의 onnxruntime-web 백엔드는 기본 `wasmPaths` 가 jsdelivr CDN 이라
+ * dev 에서 `cdn.jsdelivr.net/npm/onnxruntime-web@.../dist/` 로 fetch 가 나간다. 외부
+ * 네트워크 0 정책을 깨뜨리므로 `/ort/` prefix 로 mount 해 `node_modules/onnxruntime-web/dist/`
+ * 를 같은 origin 으로 노출한다 (`configureNerEnv.ts` 가 wasmPaths 를 `/ort/` 로 덮어쓴다).
+ *
+ * dev 서버 전용. 본 빌드(`build:nlp`)에서는 onnxruntime-web 이 `viteSingleFile` 로 inline
+ * 되어 단일 HTML 안에 들어가므로 런타임에 추가 fetch 가 발생하지 않는다.
+ */
+function ortRuntimeServer(): Plugin {
+  const ortDir = path.resolve(__dirname, 'node_modules/onnxruntime-web/dist');
+  const URL_PREFIX = '/ort/';
+  return {
+    name: 'ort-runtime-server',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith(URL_PREFIX)) return next();
+        const relPath = decodeURIComponent(req.url.slice(URL_PREFIX.length).split('?')[0]);
+        const safe = path.posix.normalize('/' + relPath).slice(1);
+        const filePath = path.join(ortDir, safe);
+        if (!filePath.startsWith(ortDir)) {
+          res.statusCode = 403;
+          res.end('forbidden');
+          return;
+        }
+        try {
+          const data = await fs.readFile(filePath);
+          if (filePath.endsWith('.mjs') || filePath.endsWith('.js'))
+            res.setHeader('Content-Type', 'application/javascript');
+          else if (filePath.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm');
+          res.setHeader('Content-Length', String(data.byteLength));
+          res.end(data);
+        } catch (e) {
+          res.statusCode = 404;
+          res.end(`ort-runtime-server: ${(e as Error).message}`);
+        }
+      });
+    },
+  };
+}
+
 function pocModelServer(): Plugin {
   const modelDir = process.env.POC_MODEL_DIR ?? path.join(os.homedir(), 'Downloads', 'privacy-filter');
   const URL_PREFIX = '/models/privacy-filter/';
@@ -167,7 +294,9 @@ export default defineConfig(({ mode }) => {
       react(),
       stripMupdfWasmAsset(),
       deferredWasmModuleWorker(),
-      ...(isNlp ? [pocModelServer()] : []),
+      ...(isNlp
+        ? [pocModelServer(), ortRuntimeServer(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
+        : []),
       ...(isMulti ? [] : [viteSingleFile()]),
     ],
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
