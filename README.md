@@ -3,6 +3,7 @@
 한국어 PDF 안의 PII(개인정보)를 **브라우저 안에서만** 식별하고 제거하여 익명화된 PDF로 내보내는 도구입니다.
 
 - 주민등록번호 · 전화 · 이메일 · 계좌번호 · 사업자번호 · 카드번호 6종을 정규식으로 자동 탐지
+- NLP 빌드에서 OpenAI privacy-filter NER 모델을 사용해 사람 이름 · 주소 · URL · 날짜 · 시크릿 후보를 추가 탐지
 - 자동 탐지 결과를 사용자 검수(체크 해제/수동 박스 추가)로 보강
 - MuPDF redaction 으로 텍스트 레이어까지 실제로 제거 후 메타데이터 정리
 - 적용 결과를 한 번 더 텍스트 추출로 검증(누수 0건 확인)하여 다운로드
@@ -11,13 +12,15 @@
 
 - **PDF 는 외부로 나가지 않습니다.** 모든 처리는 클라이언트 사이드(브라우저) 에서 끝납니다.
 - **단일 HTML 파일 배포.** `dist/index.html` 을 더블클릭(`file://`)해서 실행합니다. 설치/`.exe` 없습니다.
-- OCR/NER 은 후속 마일스톤. 현재는 **정규식 + 수동 검수** 가 MVP 입니다. 스캔본 PDF 처럼 텍스트 레이어가 없으면 자동 탐지 결과는 비고 수동 박스로 처리해야 합니다.
+- OCR 은 후속 마일스톤입니다. 스캔본 PDF 처럼 텍스트 레이어가 없으면 자동 탐지 결과는 비고 수동 박스로 처리해야 합니다.
+- NER 은 별도 NLP 빌드(`npm run build:nlp`)에서만 포함됩니다. 모델은 자동 다운로드하지 않고 사용자가 받아둔 폴더를 선택합니다.
 
 ## 기술 스택
 
 - React 19 + Vite 5 + TypeScript
 - [MuPDF.js 1.27](https://www.npmjs.com/package/mupdf) (WASM) — Web Worker 안에 격리, comlink RPC
 - Zustand (단일 스토어 + undo/redo)
+- @huggingface/transformers + onnxruntime-web (NLP 빌드 전용, 로컬 WASM 서빙)
 - shadcn/ui (Radix Primitives + Tailwind) — 디자인 시스템 토큰화, 16개 ui primitive
 - Sonner (토스트)
 - vite-plugin-singlefile + 자체 WASM 임베드 스크립트 (단일 HTML 산출)
@@ -27,7 +30,9 @@
 ```bash
 npm install        # 처음 한 번
 npm run dev        # 개발 서버 (http://localhost:5173)
+npm run dev:nlp    # NER 포함 개발 서버
 npm run build      # 단일 HTML 산출 → dist/index.html (~13.25 MB)
+npm run build:nlp  # NER 보강 포함 빌드 → dist-nlp/index-nlp.html (~54 MB, 예산 70 MB)
 npm test           # 단위 + 통합 테스트 (vitest)
 npm run lint       # tsc -b 타입 체크
 ```
@@ -42,7 +47,8 @@ npm run lint       # tsc -b 타입 체크
 1. **PDF 열기** — 화면에 파일을 드롭하거나 상단 `PDF 열기` 버튼으로 선택합니다.
 2. **자동 탐지 검수** — 왼쪽 패널의 카테고리(주민/전화/이메일/계좌/사업자/카드)에서 페이지별 후보를 확인하고 제외할 항목은 체크 해제합니다.
 3. **누락 영역 보강** — PDF 위에서 드래그해 수동 박스를 추가합니다. 텍스트만 선택하려면 Shift 를 누른 채 드래그합니다.
-4. **익명화 적용 → 저장** — 상단의 익명화 버튼으로 redaction 을 수행하면 검증 리포트가 표시되고, `PDF 저장` 으로 내 PC 에 저장합니다.
+4. **NER 모델 로드(선택)** — NLP 빌드에서는 상단 `NER 모델 로드` 버튼으로 받아둔 OpenAI privacy-filter 모델 폴더를 선택해 비정형 PII 후보를 추가할 수 있습니다.
+5. **익명화 적용 → 저장** — 상단의 익명화 버튼으로 redaction 을 수행하면 검증 리포트가 표시되고, `PDF 저장` 으로 내 PC 에 저장합니다.
 
 빌드 산출물(`dist/index.html`)을 더블클릭하면 동일하게 동작합니다 — 설치/네트워크 불필요.
 
@@ -108,7 +114,6 @@ tests/
 MVP 범위 외(설계상 제외):
 
 - OCR (스캔본 텍스트화) — `TextExtractor` 인터페이스가 확장 가능하도록만 설계되어 있습니다.
-- NER (이름/주소/기관명)
 - PWA / Service Worker
 - 데스크톱 패키징(.exe 등)
 

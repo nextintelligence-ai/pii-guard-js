@@ -4,7 +4,7 @@
 
 ## 프로젝트 한 줄 요약
 
-브라우저 단독으로 한국어 PDF 의 PII 6종(주민/전화/이메일/계좌/사업자/카드)을 redaction 하는 **단일 HTML 도구**. React 19 + Vite + MuPDF.js(WASM) + Web Worker.
+브라우저 단독으로 한국어 PDF 의 PII 6종(주민/전화/이메일/계좌/사업자/카드)을 redaction 하는 **단일 HTML 도구**. NLP 빌드에서는 OpenAI privacy-filter NER 로 사람 이름/주소/URL/날짜/시크릿 후보를 추가한다. React 19 + Vite + MuPDF.js(WASM) + Web Worker.
 
 ## 절대 깨지면 안 되는 제약
 
@@ -12,7 +12,7 @@
 
 1. **외부 네트워크 호출 금지.** PDF 도, 텔레메트리도, 폰트도, 어떤 fetch 도 외부로 나가서는 안 됩니다. `scripts/verify-no-external.mjs` 가 postbuild 에서 산출 HTML 안의 모든 URL 을 검사합니다. dev 안내용 console.error URL(`react.dev/errors/`, `radix-ui.com/primitives/`)만 allow list 에 있습니다.
 2. **단일 HTML, `file://` 더블클릭 동작.** 빌드는 `dist/index.html` 하나입니다. Service Worker / PWA / 별도 자산 파일 추가 금지. `vite-plugin-singlefile` 가 inline 하는 전제를 깨면 안 됩니다.
-3. **빌드 사이즈 18MB 예산.** `scripts/verify-build-size.mjs` 가 postbuild 에서 가드합니다. 큰 의존성(폰트/모델/별도 wasm) 추가 전엔 사이즈 영향을 먼저 추정하세요.
+3. **빌드 사이즈 예산.** 기본 빌드는 18MB, NLP 빌드는 70MB 입니다. `scripts/verify-build-size.mjs` 가 postbuild 에서 가드합니다. 큰 의존성(폰트/모델/별도 wasm) 추가 전엔 사이즈 영향을 먼저 추정하세요.
 4. **PII 처리 결과 검증.** 적용 후 `useApply` 가 다시 텍스트를 추출해 누수 0건을 확인합니다(`postCheckLeaks === 0`). 이 검증을 우회하지 마세요.
 
 ## 사용자 환경 메모
@@ -26,7 +26,9 @@
 npm test           # vitest run (단위 + 통합)
 npm run lint       # tsc -b
 npm run build      # tsc -b && vite build → dist/index.html + postbuild 검증 2종
+npm run build:nlp  # tsc -b && vite build --mode nlp → dist-nlp/index-nlp.html + 70MB 검증
 npm run dev        # http://localhost:5173
+npm run dev:nlp    # NER 포함 개발 서버
 ```
 
 `prebuild`/`predev`/`pretest` 가 자동으로 `scripts/embed-wasm.mjs` 를 실행해 `src/wasm/mupdfBinary.ts`(gitignored) 를 만듭니다. 직접 만지지 마세요.
@@ -76,6 +78,14 @@ npm run dev        # http://localhost:5173
 - **Sonner 토스트**는 `toast.loading({ id })` → 같은 id 로 success/warning/error 갱신해서 중복을 막습니다(`useApply` 참고).
 - **Dialog 정중앙 애니메이션.** `tailwindcss-animate` 의 `zoom-in-95` 가 `transform` 을 덮어쓰기 때문에 정중앙 dialog 에는 `slide-in-from-left-1/2` + `slide-in-from-top-[48%]` 를 함께 붙여야 `--tw-enter-translate-{x,y}` 가 -50%/-48% 로 세팅되어 중앙에서 자연스럽게 나타납니다(`src/components/ui/dialog.tsx`).
 
+## NER (transformers.js + onnxruntime-web) 함정
+
+- **모델은 BYOM**, 도구가 자동 다운로드하지 않는다. `~/Downloads/privacy-filter` 가 기본, `POC_MODEL_DIR` 로 override.
+- **onnxruntime-web 의 wasm 백엔드는 jsdelivr CDN 에서 fetch 하는 게 기본**. `env.backends.onnx.wasm.wasmPaths = '/ort/'` 로 로컬 경로 강제. dev 는 vite middleware (`ortRuntimeServer`), 빌드는 viteSingleFile inline.
+- **워커 분리**. `src/workers/ner.worker.ts` 가 mupdf 워커 (`pdf.worker.ts`) 와 별개. 둘은 store 통해서만 합류.
+- **NER 후보는 기본 OFF + 신뢰도 슬라이더 (0.5..0.95, 기본 0.7)**. score hard floor 는 워커 내 0.5. UI 슬라이더는 표시 필터만.
+- **모델 캐시는 OPFS** (`navigator.storage.getDirectory()`). config.json 의 sha256 으로 hash, localStorage 메타에 매핑.
+
 ## 작업 흐름 가이드
 
 1. **새 기능 추가 전엔 [HANDOFF.md](./HANDOFF.md) 의 "What Worked" / "What Didn't Work" 를 먼저 확인합니다.** 같은 함정에 두 번 빠지지 않습니다.
@@ -89,7 +99,6 @@ npm run dev        # http://localhost:5173
 이걸 추가해도 좋겠다는 충동이 들면, 사용자에게 먼저 확인합니다.
 
 - OCR (스캔본 텍스트화) — `TextExtractor` 인터페이스로 확장 여지만 둠
-- NER (이름/주소/기관명)
 - PWA / Service Worker — 명시적으로 제외 결정됨
 - 데스크톱 패키징(.exe 등)
 
