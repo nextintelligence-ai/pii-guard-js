@@ -2,6 +2,8 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs/promises';
 
 /**
  * mupdf 의 ESM 엔트리(`mupdf-wasm.js`)는 다음 패턴을 포함한다:
@@ -108,6 +110,47 @@ function deferredWasmModuleWorker(): Plugin {
   };
 }
 
+/**
+ * NLP 모드 dev 서버에서 로컬 모델 디렉토리를 정적 서빙한다.
+ *
+ * transformers.js 는 `pipeline(task, modelId, ...)` 호출 시 fetch 로 `${origin}/${localModelPath}/${modelId}/...`
+ * 을 요청한다. PoC 단계에서는 사용자가 받아둔 폴더 (기본 `~/Downloads/privacy-filter`,
+ * `POC_MODEL_DIR` 로 override) 를 `/models/privacy-filter/` 로 mount 해 표준 fetch 흐름으로
+ * 동작시킨다. dev 서버에서만 활성. 빌드(`build:nlp`) 산출물에는 영향 없음.
+ */
+function pocModelServer(): Plugin {
+  const modelDir = process.env.POC_MODEL_DIR ?? path.join(os.homedir(), 'Downloads', 'privacy-filter');
+  const URL_PREFIX = '/models/privacy-filter/';
+  return {
+    name: 'poc-model-server',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url || !req.url.startsWith(URL_PREFIX)) return next();
+        const relPath = decodeURIComponent(req.url.slice(URL_PREFIX.length).split('?')[0]);
+        const safe = path.posix.normalize('/' + relPath).slice(1);
+        const filePath = path.join(modelDir, safe);
+        if (!filePath.startsWith(modelDir)) {
+          res.statusCode = 403;
+          res.end('forbidden');
+          return;
+        }
+        try {
+          const data = await fs.readFile(filePath);
+          if (filePath.endsWith('.json')) res.setHeader('Content-Type', 'application/json');
+          else if (filePath.endsWith('.onnx')) res.setHeader('Content-Type', 'application/octet-stream');
+          else if (filePath.endsWith('.onnx_data')) res.setHeader('Content-Type', 'application/octet-stream');
+          res.setHeader('Content-Length', String(data.byteLength));
+          res.end(data);
+        } catch (e) {
+          res.statusCode = 404;
+          res.end(`poc-model-server: ${(e as Error).message}`);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const isMulti = mode === 'multi';
   const isNlp = mode === 'nlp';
@@ -120,7 +163,13 @@ export default defineConfig(({ mode }) => {
     ? { index: path.resolve(__dirname, 'index-nlp.html') }
     : { index: path.resolve(__dirname, 'index.html') };
   return {
-    plugins: [react(), stripMupdfWasmAsset(), deferredWasmModuleWorker(), ...(isMulti ? [] : [viteSingleFile()])],
+    plugins: [
+      react(),
+      stripMupdfWasmAsset(),
+      deferredWasmModuleWorker(),
+      ...(isNlp ? [pocModelServer()] : []),
+      ...(isMulti ? [] : [viteSingleFile()]),
+    ],
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
     // React DOM 19 는 Navigation API 가 있으면 synthetic navigation 을 시작한다.
     // 단일 HTML 을 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을

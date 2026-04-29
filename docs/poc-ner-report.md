@@ -10,9 +10,9 @@
 
 ## Q1. file:// 단일 HTML 동작 가능 여부
 
-**측정 상태**: 부분 — 빌드 자체는 산출, 그러나 `verify-no-external` 가드가 fail.
+**측정 상태**: 빌드 + dev 서버 부팅 + Chromium 페이지 로드까지 확인. 추론 단계는 미완료 — onnxruntime wasm 백엔드의 외부 CDN 의존성이 spec 위반이라 해결 task 필요.
 
-**측정 결과**:
+**측정 결과 1: 빌드/정규식 가드**:
 - `npm run build:nlp` 산출 `dist-nlp/index-nlp.html` 생성 (63 MB, 후속 Q5 참조)
 - `postbuild:nlp` 의 `verify-no-external --target=dist-nlp/index-nlp.html` 가 외부 URL 발견으로 실패. transformers.js / onnxruntime-web 코드 안에 다음 URL string 들이 박혀있음:
   - `https://huggingface.co/...` (hub 안내, fetch 호출 아님)
@@ -21,13 +21,21 @@
   - `https://developer.mozilla.org/...` (안내)
   - `https://github.com/huggingface/transformers.js/issues/new/choose` (안내)
   - PoC 픽스처의 `https://acme.com` (의도된 입력 문자열)
-- 이들은 모두 **string concat / fallback 문구**로 박혀있을 뿐 `env.allowRemoteModels = false` 가 적용되어 실제 fetch 호출은 발생하지 않는다. 단, 정규식 검사 정책상 fail.
+- 일부는 string-only 지만 **`cdn.jsdelivr.net` 은 실제로 fetch 가 발생** (아래 측정 결과 2 참조).
 
-**file:// 더블클릭 동작 검증** (**휴먼 측정 미완료**):
-- 가드를 임시 우회하면 `dist-nlp/index-nlp.html` 더블클릭으로 PoC 진입점이 로드되는지 확인 필요.
-- 모델 폴더 선택 → transformers.js 의 로컬 모델 로딩이 file:// 환경에서 동작하는지 확인 필요.
+**측정 결과 2 (가장 중요): onnxruntime wasm 백엔드의 CDN 의존성**:
+- vite dev 서버 + Chromium playwright 으로 페이지 로드 시 다음 fetch 가 시도됨:
+  - `https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.../dist/ort-wasm-simd-threaded.asyncify.wasm`
+  - `https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.../dist/ort-wasm-simd-threaded.asyncify.mjs`
+- transformers.js 4.2 가 `onnxruntime-web` 의 wasm 백엔드를 **런타임에 jsdelivr CDN 에서 fetch** 하는 게 기본 동작. `env.allowRemoteModels = false` 는 모델 fetch 만 막지, 백엔드 wasm 은 별도 정책.
+- spec N2/5.4 "외부 네트워크 0" 와 정면 충돌. 빌드(`build:nlp`) 의 viteSingleFile 이 wasm 까지 inline 하는 것으로 보이지만, dev/file:// 환경에서의 실제 fetch 동작 검증이 더 필요.
 
-> **결론 초안**: 빌드는 가능. 정책 갱신 (allow list 확장) 만 하면 가드도 통과 가능. 실제 file:// 더블클릭 + 모델 로드는 휴먼 측정에서 확인.
+**해결 방향**:
+- `env.backends.onnx.wasm.wasmPaths = '/ort/'` (또는 비슷한 옵션) 으로 설정
+- vite middleware 로 `/ort/` 를 `node_modules/onnxruntime-web/dist/` 에 매핑
+- 빌드 시점에는 onnxruntime-web 의 wasm 도 base64 임베드 (mupdf 와 동일 패턴)
+
+> **결론**: 빌드는 가능하지만 spec 의 외부 네트워크 0 정책과 실제 동작 사이의 갭이 존재. 본구현 plan 의 첫 phase 에 **onnxruntime wasm 백엔드 로컬화 task** 가 들어가야 한다 (모델 로딩보다 우선).
 
 ---
 
@@ -114,16 +122,18 @@ dist-nlp/index-nlp.html 더블클릭 후 콘솔 확인 필요.
 
 | Spec 항목 | 현 결정 | 갱신 제안 |
 |---|---|---|
-| N7. NLP 빌드 예산 | 35 MB | **70 MB 상향 (옵션 1)** — 또는 사용자와 트레이드오프 재논의 |
-| 5.4. 외부 네트워크 가드 | "transformers.js 가 출력하는 dev URL 만 추가 (있다면)" | **명시적 allow list**: `huggingface.co/`, `cdn.jsdelivr.net/`, `web.dev/`, `developer.mozilla.org/`, `github.com/huggingface/transformers.js/`, 픽스처용 `acme.com` — 모두 string-only, fetch 미발생 확인. allow list 검증 자체를 강화 (단순 prefix 매칭) 필요. |
-| 4.2 NER worker 의 모델 로딩 | "transformers.js `pipeline` + `env.allowRemoteModels=false`" | 정확한 로컬 모델 로딩 방식 (env.localModelPath, custom fetch hook 등) 은 휴먼 측정 후 확정 |
-| 7. 비기능 요구사항 | "페이지당 추론 < 3s on WebGPU, < 15s on WASM" | 휴먼 측정 후 실측 기반으로 갱신 |
+| N7. NLP 빌드 예산 | 35 MB | **70 MB 상향** (실측 63MB) |
+| 5.4. 외부 네트워크 가드 | "transformers.js 가 출력하는 dev URL 만 추가 (있다면)" | **이중 정책**: (1) 안내용 string URL 은 prefix allow list 로 통과 (`huggingface.co/`, `web.dev/`, `developer.mozilla.org/`, `github.com/huggingface/transformers.js/`). (2) **실제 fetch 가 발생하는 `cdn.jsdelivr.net/npm/onnxruntime-web@...`** 는 allow 가 아니라 **로컬 서빙으로 차단** — onnxruntime-web 의 wasm 을 `node_modules/onnxruntime-web/dist/` 에서 vite middleware 로 서빙하고 `env.backends.onnx.wasm.wasmPaths` 로 가리킴. |
+| **신규** N10. onnxruntime wasm 로컬화 | — | onnxruntime-web 의 wasm 백엔드를 빌드/dev 모두에서 로컬에서 가져온다. dev: vite middleware. 빌드: viteSingleFile 의 inline 동작 검증 + 필요 시 별도 base64 임베드. |
+| 4.2 NER worker 의 모델 로딩 | "transformers.js `pipeline` + `env.allowRemoteModels=false`" | + `env.backends.onnx.wasm.wasmPaths` 설정 명시. |
+| 7. 비기능 요구사항 | "페이지당 추론 < 3s on WebGPU, < 15s on WASM" | wasm 백엔드 로컬화 후 실측 기반으로 갱신 |
 
 ### 인프라 변경 후보 (본구현 plan 의 task 후보)
 
-- `verify-no-external.mjs` 의 NLP 모드 allow list (또는 `--allow=<url>` 인자)
-- `verify-build-size.mjs` 의 NLP 모드 예산 (예: 70 MB)
-- transformers.js 의 wasm 백엔드 임베드 방식 — onnxruntime-web 의 wasm 이 viteSingleFile 에 포함되는지 확인 (포함 안 되면 별도 임베드 스크립트 필요)
+- **(최우선) onnxruntime-web wasm 의 로컬 서빙** — 본구현 plan 의 첫 phase. 이게 안 풀리면 외부 네트워크 0 정책이 깨져 spec 의 핵심 가정이 무너진다.
+- `verify-no-external.mjs` 의 NLP 모드 정책 — 안내 string 은 allow, 실 fetch 는 차단 (현재 코드는 둘을 구분 못함 → 정규식이 둘 다 잡음). 정책 강화 필요.
+- `verify-build-size.mjs` 의 NLP 모드 예산 (70 MB)
+- viteSingleFile 이 onnxruntime-web wasm 을 빌드에 inline 하는지 정밀 검증 (산출 HTML 안에 wasm 의 base64 가 실제로 박혀있는지 grep) — 만약 안 들어가 있으면 본구현 plan 에 별도 임베드 스크립트 (mupdf 와 동일 패턴) 추가
 
 ---
 
