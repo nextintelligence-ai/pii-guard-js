@@ -37,9 +37,10 @@
 | N4 | NER 과 정규식 관계 = **보강 전용**. 겹치는 3종(계좌/전화/이메일)은 정규식 우선, NER 무시. NER 단독 5종(person/address/url/date/secret)만 추가 | |
 | N5 | 추론 트리거 = **문서 로드 직후 자동 + 페이지 단위 큐**. 현재 페이지 우선순위 승격 | 일괄 추론 X (UX) |
 | N6 | 신뢰도 = **score ≥ 0.7 (조정 가능)**, NER 후보는 **모두 기본 체크 OFF** | 정규식은 기본 ON 유지 |
-| N7 | 빌드 분기 = **`npm run build:nlp` 신설**. 기본 빌드는 18MB 그대로 | `verify-build-size.mjs` NLP 모드 예산 35MB |
+| N7 | 빌드 분기 = `npm run build:nlp` 신설. 기본 빌드는 18MB 그대로 | NLP 모드 예산 **70 MB** (PoC 실측 63MB 기반) |
 | N8 | 추론 백엔드 = **WebGPU 우선, WASM/CPU 폴백** | 둘 다 불가 시 NER 비활성 + 경고 |
 | N9 | NER 워커 = **mupdf 워커와 분리**된 `workers/ner.worker.ts` | 책임 격리 |
+| N10 | onnxruntime-web wasm 백엔드의 로컬화 — dev 서버는 vite middleware 로 `/ort/` 매핑, 빌드는 viteSingleFile 의 inline 보장(또는 별도 임베드 스크립트) | spec 의 외부 네트워크 0 정책을 깨지 않기 위함. PoC 에서 jsdelivr CDN fetch 발견 |
 
 ---
 
@@ -155,6 +156,7 @@ interface Entity {
 
 **구현 지침**
 - `import { pipeline, env } from '@huggingface/transformers'` 후 `env.allowRemoteModels = false; env.allowLocalModels = true`
+- `env.backends.onnx.wasm.wasmPaths = '/ort/'` 로 onnxruntime-web 의 wasm 백엔드를 로컬 prefix 에서 받게 한다. dev 서버는 vite middleware 가 `node_modules/onnxruntime-web/dist/` 를 매핑.
 - 첫 시도: `pipeline('token-classification', modelPath, { device: 'webgpu', dtype: 'q4' })`
 - WebGPU 초기화 실패 catch → `{ device: 'wasm' }` 로 재시도
 - 호출 시 `aggregation_strategy: 'simple'` 로 entity 단위 출력
@@ -265,13 +267,15 @@ interface DispatcherState {
 | 모드 | 명령 | 산출 | 예산 |
 |---|---|---|---|
 | 정규식 단독 (기본) | `npm run build` | `dist/index.html` | 18 MB |
-| NER 포함 | `npm run build:nlp` | `dist-nlp/index.html` | 35 MB |
+| NER 포함 | `npm run build:nlp` | `dist-nlp/index.html` | 70 MB |
 
 둘 다 단일 HTML, file:// 더블클릭 동작. 사용자는 필요한 쪽을 받는다.
 
 ### 5.4 외부 네트워크 가드
 
-`scripts/verify-no-external.mjs` 의 allow list 에 transformers.js 가 dev 안내용으로 출력하는 URL 만 추가 (있다면). 모델 hub URL, telemetry 엔드포인트는 발견 즉시 빌드 실패. NLP 모드에서도 산출 HTML 안의 모든 URL 을 동일 정책으로 검사한다.
+`scripts/verify-no-external.mjs` 의 NLP 모드 정책은 **이중 구조** 다.
+1. **Prefix allow list** — transformers.js / onnxruntime-web 코드 안에 string 으로 박혀있고 실제 fetch 는 발생하지 않는 안내 URL 들: `huggingface.co/`, `web.dev/`, `developer.mozilla.org/`, `github.com/huggingface/transformers.js/`, `https://acme.com` (테스트 픽스처).
+2. **차단** — 실제 런타임 fetch 가 발생하는 `cdn.jsdelivr.net/npm/onnxruntime-web@...` 은 allow 가 아니라 **로컬 서빙으로 대체**. 산출 HTML 안의 wasm 은 `viteSingleFile` 또는 별도 임베드로 inline.
 
 ---
 
@@ -339,6 +343,7 @@ interface DispatcherState {
 | WebGPU 가 file:// 에서 비활성 (브라우저 일부) | NER 활성화 실패 | WASM 폴백 + 폴백 시 명시적 토스트 (`현재 환경에서는 NER 추론이 느릴 수 있습니다`) |
 | 모델 로드 / 추론 중 사용자가 새 PDF 로드 | race condition | nerDispatcher.cancel + abortController. 단위 테스트로 보호 |
 | OPFS 가 file:// 에서 비활성 | 캐시 불가, 매번 사용자가 폴더 선택 | 메모리 fallback (한 세션 안에서만 유효). 명시적 토스트 |
+| transformers.js 의 onnxruntime-web 백엔드가 jsdelivr CDN 에서 wasm 을 fetch | 외부 네트워크 0 정책 위반, file:// 동작 실패 | env.backends.onnx.wasm.wasmPaths 설정 + vite middleware (dev) + viteSingleFile inline (build). T0.3 에서 검증 |
 
 ---
 
