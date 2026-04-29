@@ -37,7 +37,7 @@ function stripMupdfWasmAsset(): Plugin {
   };
 }
 
-function fileProtocolInlineModuleWorker(): Plugin {
+function deferredWasmModuleWorker(): Plugin {
   const needle = 'export default function WorkerWrapper(options) {\n            let objURL;';
   const replacement = `function createFileProtocolModuleWorker(encodedJs, options) {
             const workerSource = [
@@ -89,13 +89,11 @@ function fileProtocolInlineModuleWorker(): Plugin {
             return worker;
           }
           export default function WorkerWrapper(options) {
-            if (globalThis.location?.protocol === "file:") {
-              return createFileProtocolModuleWorker(encodedJs, options);
-            }
+            return createFileProtocolModuleWorker(encodedJs, options);
             let objURL;`;
 
   return {
-    name: 'file-protocol-inline-module-worker',
+    name: 'deferred-wasm-module-worker',
     enforce: 'post',
     transform(code) {
       if (!code.includes('const encodedJs =') || !code.includes(needle)) {
@@ -113,7 +111,7 @@ function fileProtocolInlineModuleWorker(): Plugin {
 export default defineConfig(({ mode }) => {
   const isMulti = mode === 'multi';
   return {
-    plugins: [react(), stripMupdfWasmAsset(), fileProtocolInlineModuleWorker(), ...(isMulti ? [] : [viteSingleFile()])],
+    plugins: [react(), stripMupdfWasmAsset(), deferredWasmModuleWorker(), ...(isMulti ? [] : [viteSingleFile()])],
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
     // React DOM 19 는 Navigation API 가 있으면 synthetic navigation 을 시작한다.
     // 단일 HTML 을 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
