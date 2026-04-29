@@ -1,5 +1,5 @@
 /**
- * PoC 픽스처 — 영문 / 한국어 텍스트와 사람이 검수한 기대 entity.
+ * NER 테스트 픽스처 — 영문 / 한국어 텍스트와 사람이 검수한 기대 entity.
  *
  * `expected` 의 start/end 는 `text` 안의 UTF-16 char offset (`text.slice(start, end) === word`).
  * 한국어 픽스처는 모델 한국어 성능이 미지수라 `expected` 를 비워두고 baseline JSON 으로 측정한다.

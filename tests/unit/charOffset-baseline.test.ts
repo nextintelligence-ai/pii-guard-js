@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { compareEntityOffsets } from '@/poc/compareEntityOffsets';
-import { EN_FIXTURES } from '@/poc/poc-fixtures';
+import { compareEntityOffsets } from '@tests/util/compareEntityOffsets';
+import { EN_FIXTURES } from '@tests/fixtures/ner-fixtures';
 
 describe('PoC: char offset 정확도 비교', () => {
   it('영문 기대값과 동일한 entity 출력은 모두 exactMatches 로 분류한다', () => {

@@ -16,7 +16,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
-    "paths": { "@/*": ["src/*"] },
+    "paths": { "@/*": ["src/*"], "@tests/*": ["tests/*"] },
     "baseUrl": "."
   },
   "include": ["src", "tests"],

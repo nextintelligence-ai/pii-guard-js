@@ -7,5 +7,10 @@ export default defineConfig({
     globals: true,
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
   },
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+      '@tests': path.resolve(__dirname, 'tests'),
+    },
+  },
 });

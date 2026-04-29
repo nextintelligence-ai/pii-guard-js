@@ -1,11 +1,11 @@
 /**
  * entity 출력의 char offset 정확도를 측정하는 비교 함수.
  *
- * `ner-poc.ts` 의 transformers.js import 가 단위 테스트(jsdom)를 깨뜨리지 않도록
- * 순수 함수만 별도 파일로 분리한다.
+ * NER 출력의 char span 이 기대값과 일치하는지 검증하는 순수 함수.
+ * 단위 테스트(jsdom)에서 transformers.js 같은 무거운 의존성 없이 사용 가능하다.
  */
 
-import type { FixtureCase } from './poc-fixtures';
+import type { FixtureCase } from '@tests/fixtures/ner-fixtures';
 
 export interface EntityOutput {
   entity_group: string;
