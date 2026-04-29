@@ -10,6 +10,7 @@ import {
   renderPage,
   setWasmBinary,
 } from '@/core/mupdfBridge';
+import { adaptToStructuredLines } from '@/core/spanMap';
 import type { PdfWorkerApi } from './pdf.worker.types';
 
 const api: Partial<PdfWorkerApi> = {
@@ -27,6 +28,10 @@ const api: Partial<PdfWorkerApi> = {
   },
   async extractSpans(pageIndex) {
     return extractSpans(pageIndex);
+  },
+  async extractStructuredText(pageIndex) {
+    const lines = await extractLines(pageIndex);
+    return adaptToStructuredLines(lines);
   },
   async detectAll(pageIndex) {
     const lines = await extractLines(pageIndex);

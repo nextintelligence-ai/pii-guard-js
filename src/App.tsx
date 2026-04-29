@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useAppStore } from "@/state/store";
 import { Toolbar } from "@/components/Toolbar";
 import { DropZone } from "@/components/DropZone";
@@ -21,6 +21,11 @@ import {
   hasSeenUsageGuide,
   markUsageGuideSeen,
 } from "@/utils/usageGuideStorage";
+
+const NerRuntime =
+  import.meta.env.MODE === "nlp"
+    ? lazy(() => import("@/components/NerRuntime"))
+    : null;
 
 export default function App() {
   useKeyboard();
@@ -73,6 +78,11 @@ export default function App() {
                     {doc.pages.length}페이지
                   </span>
                 </div>
+                {NerRuntime && (
+                  <Suspense fallback={null}>
+                    <NerRuntime />
+                  </Suspense>
+                )}
                 <CandidatePanel />
               </div>
             </ScrollArea>

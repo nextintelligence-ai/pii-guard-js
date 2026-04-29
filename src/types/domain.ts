@@ -13,7 +13,14 @@ export type DetectionCategory =
   | 'account'
   | 'businessNo'
   | 'card'
-  | 'address';
+  | 'address'
+  | 'private_person'
+  | 'private_address'
+  | 'private_url'
+  | 'private_date'
+  | 'secret';
+
+export type CandidateSource = 'auto' | 'ner';
 
 export type Candidate = {
   id: string;
@@ -22,7 +29,7 @@ export type Candidate = {
   text: string;
   category: DetectionCategory;
   confidence: number;
-  source: 'auto';
+  source: CandidateSource;
 };
 
 export type RedactionBoxSource = 'auto' | 'text-select' | 'manual-rect';

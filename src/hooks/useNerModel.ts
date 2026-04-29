@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import { spawnNerWorker, type NerWorkerApi } from '@/core/nerWorkerClient';
 import {
   computeModelHash,
@@ -19,7 +20,7 @@ import {
  */
 export type NerModelState = 'idle' | 'loading' | 'ready' | 'error' | 'unsupported';
 
-interface UseNerModel {
+export interface UseNerModel {
   state: NerModelState;
   meta: ModelMeta | null;
   worker: NerWorkerApi | null;
@@ -27,52 +28,20 @@ interface UseNerModel {
   reset(): void;
 }
 
-export function useNerModel(): UseNerModel {
-  const [state, setState] = useState<NerModelState>('idle');
-  const [meta, setMeta] = useState<ModelMeta | null>(() => readModelMeta());
-  const [worker, setWorker] = useState<NerWorkerApi | null>(null);
+let cachedLoadStarted = false;
 
-  // 첫 마운트 시 캐시 메타가 있으면 자동 로드 시도. OPFS 안에 모델 파일이 살아있음을 가정한다.
-  // unmount race 방지를 위해 cancelled flag 로 cleanup 처리.
-  useEffect(() => {
-    let cancelled = false;
-    const cachedMeta = readModelMeta();
-    if (!cachedMeta) return;
-
-    void (async () => {
-      setState('loading');
-      try {
-        const w = await spawnNerWorker();
-        const { labelMap, backend } = await w.load(new ArrayBuffer(0));
-        if (cancelled) {
-          void w.unload();
-          return;
-        }
-        setWorker(w);
-        setState('ready');
-        console.log(
-          `[useNerModel] 캐시에서 로드 (backend=${backend}, labels=${Object.keys(labelMap).length})`,
-        );
-      } catch (e) {
-        if (cancelled) return;
-        console.warn('[useNerModel] 캐시 로드 실패:', e);
-        setState('error');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const loadFromUserDir = useCallback(async (): Promise<void> => {
-    setState('loading');
+export const useNerModelStore = create<UseNerModel>((set, get) => ({
+  state: 'idle',
+  meta: readModelMeta(),
+  worker: null,
+  async loadFromUserDir(): Promise<void> {
+    set({ state: 'loading' });
     try {
       const picker = (
         window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }
       ).showDirectoryPicker;
       if (!picker) {
-        setState('unsupported');
+        set({ state: 'unsupported' });
         return;
       }
       const dirHandle = await picker.call(window);
@@ -88,25 +57,61 @@ export function useNerModel(): UseNerModel {
         loadedAt: Date.now(),
         labelMap,
       };
+      const prevWorker = get().worker;
+      if (prevWorker && prevWorker !== w) {
+        void prevWorker.unload();
+      }
       writeModelMeta(newMeta);
-      setMeta(newMeta);
-      setWorker(w);
-      setState('ready');
+      set({ meta: newMeta, worker: w, state: 'ready' });
     } catch (e) {
       console.error('[useNerModel] loadFromUserDir 실패:', e);
-      setState('error');
+      set({ state: 'error' });
     }
+  },
+  reset(): void {
+    const worker = get().worker;
+    void worker?.unload();
+    set({ worker: null, meta: null, state: 'idle' });
+    localStorage.removeItem(NER_MODEL_META_KEY);
+  },
+}));
+
+export function useNerModel(): UseNerModel {
+  const session = useNerModelStore();
+
+  // 첫 마운트 시 캐시 메타가 있으면 자동 로드 시도. OPFS 안에 모델 파일이 살아있음을 가정한다.
+  useEffect(() => {
+    let cancelled = false;
+    const cachedMeta = readModelMeta();
+    if (!cachedMeta || cachedLoadStarted) return;
+    cachedLoadStarted = true;
+
+    void (async () => {
+      useNerModelStore.setState({ state: 'loading', meta: cachedMeta });
+      try {
+        const w = await spawnNerWorker();
+        const { labelMap, backend } = await w.load(new ArrayBuffer(0));
+        if (cancelled) {
+          void w.unload();
+          return;
+        }
+        useNerModelStore.setState({ worker: w, state: 'ready' });
+        console.log(
+          `[useNerModel] 캐시에서 로드 (backend=${backend}, labels=${Object.keys(labelMap).length})`,
+        );
+      } catch (e) {
+        if (cancelled) return;
+        console.warn('[useNerModel] 캐시 로드 실패:', e);
+        useNerModelStore.setState({ state: 'error', worker: null });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const reset = useCallback(() => {
-    void worker?.unload();
-    setWorker(null);
-    setMeta(null);
-    setState('idle');
-    localStorage.removeItem(NER_MODEL_META_KEY);
-  }, [worker]);
-
-  return { state, meta, worker, loadFromUserDir, reset };
+  return session;
 }
 
 async function copyDirToOpfs(

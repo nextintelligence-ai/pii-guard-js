@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
+// NER 5 카테고리는 Task 4.1 에서 패널 UI 가 본격 노출. 현재는 타입 일관성만 유지하고
+// CATS 배열에는 포함하지 않아 패널에 렌더되지 않는다.
 const LABELS: Record<DetectionCategory, string> = {
   rrn: '주민등록번호',
   phone: '전화번호',
@@ -21,6 +23,11 @@ const LABELS: Record<DetectionCategory, string> = {
   businessNo: '사업자번호',
   card: '카드번호',
   address: '주소',
+  private_person: '이름',
+  private_address: '주소(NER)',
+  private_url: 'URL',
+  private_date: '날짜',
+  secret: '기밀',
 };
 
 const CAT_COLORS: Record<DetectionCategory, string> = {
@@ -31,6 +38,11 @@ const CAT_COLORS: Record<DetectionCategory, string> = {
   businessNo: 'bg-purple-500',
   card: 'bg-yellow-500',
   address: 'bg-pink-500',
+  private_person: 'bg-rose-500',
+  private_address: 'bg-fuchsia-500',
+  private_url: 'bg-cyan-500',
+  private_date: 'bg-amber-500',
+  secret: 'bg-zinc-700',
 };
 
 const CATS: DetectionCategory[] = [

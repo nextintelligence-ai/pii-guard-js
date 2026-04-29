@@ -37,6 +37,11 @@ function makeEmptyCounts(): ApplyReport['byCategory'] {
     businessNo: 0,
     card: 0,
     address: 0,
+    private_person: 0,
+    private_address: 0,
+    private_url: 0,
+    private_date: 0,
+    secret: 0,
     manual: 0,
   };
 }

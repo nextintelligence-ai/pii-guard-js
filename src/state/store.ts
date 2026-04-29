@@ -7,8 +7,11 @@ import type {
   PageMeta,
   RedactionBox,
 } from '@/types/domain';
+import type { NerBox } from '@/core/spanMap';
 import { createId } from '@/utils/id';
 import { undoStack } from './undoStack';
+
+export type NerProgress = { done: number; total: number };
 
 export type DocState =
   | { kind: 'empty' }
@@ -26,6 +29,8 @@ type State = {
   focusNonce: number;
   categoryEnabled: Record<DetectionCategory, boolean>;
   applyResult: ApplyReport | null;
+  nerThreshold: number;
+  nerProgress: NerProgress;
 };
 
 type Actions = {
@@ -34,6 +39,7 @@ type Actions = {
   goToPage(i: number): void;
   setCandidates(list: Candidate[]): void;
   addAutoBox(c: Candidate): void;
+  addNerCandidates(pageIndex: number, boxes: NerBox[]): void;
   addManualBox(b: { pageIndex: number; bbox: Bbox; label?: string }): string;
   addTextSelectBox(b: { pageIndex: number; bbox: Bbox }): string;
   toggleBox(id: string): void;
@@ -42,6 +48,8 @@ type Actions = {
   deleteBox(id: string): void;
   selectBox(id: string | null): void;
   focusBox(id: string): void;
+  setNerThreshold(v: number): void;
+  setNerProgress(p: NerProgress): void;
   undo(): void;
   redo(): void;
   reset(): void;
@@ -62,8 +70,16 @@ const initial: State = {
     businessNo: true,
     card: true,
     address: true,
+    // NER 카테고리는 기본 OFF — 사용자가 명시적으로 활성화해야 박스가 적용된다.
+    private_person: false,
+    private_address: false,
+    private_url: false,
+    private_date: false,
+    secret: false,
   },
   applyResult: null,
+  nerThreshold: 0.7,
+  nerProgress: { done: 0, total: 0 },
 };
 
 export const useAppStore = create<State & Actions>((set, get) => ({
@@ -95,6 +111,49 @@ export const useAppStore = create<State & Actions>((set, get) => ({
           enabled: true,
         },
       },
+    }));
+  },
+  addNerCandidates(pageIndex, boxes) {
+    if (boxes.length === 0) return;
+    const threshold = get().nerThreshold;
+    const enabledMap = get().categoryEnabled;
+    const newCandidates: Candidate[] = [];
+    const newBoxes: Record<string, RedactionBox> = {};
+    for (const b of boxes) {
+      if (b.score < threshold) continue;
+      const id = createId();
+      const category = b.category as DetectionCategory;
+      const bbox: Bbox = [
+        b.bbox.x,
+        b.bbox.y,
+        b.bbox.x + b.bbox.w,
+        b.bbox.y + b.bbox.h,
+      ];
+      newCandidates.push({
+        id,
+        pageIndex,
+        bbox,
+        text: '',
+        category,
+        confidence: b.score,
+        source: 'ner',
+      });
+      // categoryEnabled[category] 가 true 일 때만 박스를 enabled 로 추가.
+      // 신규 NER 카테고리는 기본 false 라 사용자가 켤 때까지 적용되지 않는다.
+      const isEnabled = enabledMap[category] ?? false;
+      newBoxes[id] = {
+        id,
+        pageIndex,
+        bbox,
+        source: 'auto',
+        category,
+        enabled: isEnabled,
+      };
+    }
+    if (newCandidates.length === 0) return;
+    set((s) => ({
+      candidates: [...s.candidates, ...newCandidates],
+      boxes: { ...s.boxes, ...newBoxes },
     }));
   },
   addManualBox(b) {
@@ -188,6 +247,12 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     // 사이드바 행 클릭 같은 외부 트리거에서 사용. 같은 박스 재클릭 시에도
     // BoxOverlay 의 스크롤/강조 effect 가 다시 발화하도록 nonce 를 증가시킨다.
     set((s) => ({ selectedBoxId: id, focusNonce: s.focusNonce + 1 }));
+  },
+  setNerThreshold(v) {
+    set({ nerThreshold: v });
+  },
+  setNerProgress(p) {
+    set({ nerProgress: p });
   },
   undo() {
     const cur = { boxes: get().boxes, selectedBoxId: get().selectedBoxId };

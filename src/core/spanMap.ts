@@ -87,6 +87,36 @@ export function entitiesToBoxes(map: PageMap, entities: NerEntity[]): NerBox[] {
   return result;
 }
 
+/**
+ * mupdf bridge 의 `extractLines` 가 내놓는 라인 단위 텍스트 + char bbox 배열을
+ * `StructuredLine[]` (line → span → char 트리)로 변환한다.
+ *
+ * mupdf bridge 는 라인 단위만 노출하고 span 단위는 구분하지 않으므로 라인 하나당
+ * span 하나로 매핑한다. NER 입력으로 쓰기에는 라인 경계만 보존되면 충분하다.
+ *
+ * mupdf 는 string index (UTF-16 code unit) 기준으로 charBboxes 를 패딩한다는 보장이
+ * 있지만, 실측 안전을 위해 두 길이의 min 만큼만 매핑한다.
+ */
+export function adaptToStructuredLines(
+  rawLines: ReadonlyArray<{
+    text: string;
+    charBboxes: ReadonlyArray<readonly [number, number, number, number]>;
+  }>,
+): StructuredLine[] {
+  return rawLines.map((rl, lineIdx) => {
+    const N = Math.min(rl.text.length, rl.charBboxes.length);
+    const chars: Array<{ ch: string; bbox: BBox }> = [];
+    for (let i = 0; i < N; i += 1) {
+      const bb = rl.charBboxes[i]!;
+      chars.push({
+        ch: rl.text[i]!,
+        bbox: { x: bb[0], y: bb[1], w: bb[2] - bb[0], h: bb[3] - bb[1] },
+      });
+    }
+    return { id: lineIdx, spans: [{ id: lineIdx, chars }] };
+  });
+}
+
 export function serialize(lines: StructuredLine[]): PageMap {
   let pageText = '';
   const charIndex: CharIndexEntry[] = [];
