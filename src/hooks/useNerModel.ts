@@ -35,22 +35,29 @@ export const useNerModelStore = create<UseNerModel>((set, get) => ({
   meta: readModelMeta(),
   worker: null,
   async loadFromUserDir(): Promise<void> {
+    const startedAt = performance.now();
+    console.info('[useNerModel] 사용자 모델 로드 시작');
     set({ state: 'loading' });
     try {
       const picker = (
         window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }
       ).showDirectoryPicker;
       if (!picker) {
+        console.warn('[useNerModel] showDirectoryPicker 미지원 — 모델 폴더를 선택할 수 없습니다.');
         set({ state: 'unsupported' });
         return;
       }
       const dirHandle = await picker.call(window);
+      console.info('[useNerModel] 모델 폴더 선택 완료', { name: dirHandle.name });
       const configFile = await dirHandle.getFileHandle('config.json');
       const configBytes = new Uint8Array(await (await configFile.getFile()).arrayBuffer());
       const id = await computeModelHash(configBytes);
-      await copyDirToOpfs(dirHandle, id);
+      console.info('[useNerModel] 모델 config hash 계산 완료', { id });
+      const modelDir = await copyDirToOpfs(dirHandle, id);
+      console.info('[useNerModel] 모델 OPFS 복사 완료', { id });
       const w = await spawnNerWorker();
-      const { labelMap } = await w.load(new ArrayBuffer(0));
+      console.info('[useNerModel] NER worker spawn 완료');
+      const { labelMap } = await w.load(modelDir);
       const newMeta: ModelMeta = {
         id,
         modelName: 'openai/privacy-filter',
@@ -63,6 +70,11 @@ export const useNerModelStore = create<UseNerModel>((set, get) => ({
       }
       writeModelMeta(newMeta);
       set({ meta: newMeta, worker: w, state: 'ready' });
+      console.info('[useNerModel] 사용자 모델 로드 완료', {
+        id,
+        labels: Object.keys(labelMap).length,
+        ms: elapsedMs(startedAt),
+      });
     } catch (e) {
       console.error('[useNerModel] loadFromUserDir 실패:', e);
       set({ state: 'error' });
@@ -71,6 +83,7 @@ export const useNerModelStore = create<UseNerModel>((set, get) => ({
   reset(): void {
     const worker = get().worker;
     void worker?.unload();
+    cachedLoadStarted = false;
     set({ worker: null, meta: null, state: 'idle' });
     localStorage.removeItem(NER_MODEL_META_KEY);
   },
@@ -81,47 +94,59 @@ export function useNerModel(): UseNerModel {
 
   // 첫 마운트 시 캐시 메타가 있으면 자동 로드 시도. OPFS 안에 모델 파일이 살아있음을 가정한다.
   useEffect(() => {
-    let cancelled = false;
     const cachedMeta = readModelMeta();
     if (!cachedMeta || cachedLoadStarted) return;
     cachedLoadStarted = true;
 
     void (async () => {
       useNerModelStore.setState({ state: 'loading', meta: cachedMeta });
+      const startedAt = performance.now();
+      console.info('[useNerModel] 캐시 모델 자동 로드 시작', { id: cachedMeta.id });
       try {
+        const modelDir = await getCachedModelDir(cachedMeta.id);
         const w = await spawnNerWorker();
-        const { labelMap, backend } = await w.load(new ArrayBuffer(0));
-        if (cancelled) {
-          void w.unload();
-          return;
-        }
+        const { labelMap, backend } = await w.load(modelDir);
         useNerModelStore.setState({ worker: w, state: 'ready' });
         console.log(
           `[useNerModel] 캐시에서 로드 (backend=${backend}, labels=${Object.keys(labelMap).length})`,
         );
+        console.info('[useNerModel] 캐시 모델 자동 로드 완료', {
+          id: cachedMeta.id,
+          backend,
+          labels: Object.keys(labelMap).length,
+          ms: elapsedMs(startedAt),
+        });
       } catch (e) {
-        if (cancelled) return;
+        cachedLoadStarted = false;
         console.warn('[useNerModel] 캐시 로드 실패:', e);
         useNerModelStore.setState({ state: 'error', worker: null });
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   return session;
 }
 
+function elapsedMs(startedAt: number): number {
+  return Math.round(performance.now() - startedAt);
+}
+
 async function copyDirToOpfs(
   src: FileSystemDirectoryHandle,
   modelId: string,
-): Promise<void> {
+): Promise<FileSystemDirectoryHandle> {
+  const target = await getCachedModelDir(modelId, true);
+  await copyRecursive(src, target);
+  return target;
+}
+
+async function getCachedModelDir(
+  modelId: string,
+  create = false,
+): Promise<FileSystemDirectoryHandle> {
   const opfs = await navigator.storage.getDirectory();
   const models = await opfs.getDirectoryHandle('models', { create: true });
-  const target = await models.getDirectoryHandle(modelId, { create: true });
-  await copyRecursive(src, target);
+  return models.getDirectoryHandle(modelId, { create });
 }
 
 async function copyRecursive(

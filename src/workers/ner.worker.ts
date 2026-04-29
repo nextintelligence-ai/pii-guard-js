@@ -1,13 +1,23 @@
 import * as Comlink from 'comlink';
-import { pipeline } from '@huggingface/transformers';
+import { env, pipeline } from '@huggingface/transformers';
 import type { NerWorkerApi, Entity } from '@/core/nerWorkerClient';
 import { configureWorkerEnv } from './nerEnv';
 
 configureWorkerEnv();
 
-let classifier: ((text: string, opts: { aggregation_strategy: 'simple' }) => Promise<Entity[]>) | null = null;
+interface RawEntity {
+  entity_group?: string;
+  entity?: string;
+  start?: number;
+  end?: number;
+  score: number;
+  word: string;
+}
+
+let classifier: ((text: string, opts: { aggregation_strategy: 'simple' }) => Promise<RawEntity[]>) | null = null;
 let labelMap: Record<number, string> = {};
 let backend: 'webgpu' | 'wasm' = 'wasm';
+let activeModelDir: FileSystemDirectoryHandle | null = null;
 
 async function tryLoad(device: 'webgpu' | 'wasm') {
   const pipe = await pipeline('token-classification', 'privacy-filter', {
@@ -18,7 +28,15 @@ async function tryLoad(device: 'webgpu' | 'wasm') {
 }
 
 const api: NerWorkerApi = {
-  async load() {
+  async load(modelHandle) {
+    activeModelDir = isDirectoryHandle(modelHandle) ? modelHandle : null;
+    classifier = null;
+    labelMap = {};
+    const startedAt = performance.now();
+    console.info('[ner.worker] 모델 로드 시작', {
+      hasModelDirectory: activeModelDir !== null,
+    });
+
     let pipe;
     try {
       pipe = await tryLoad('webgpu');
@@ -32,13 +50,39 @@ const api: NerWorkerApi = {
     const cfg = (pipe as unknown as { model: { config: { id2label?: Record<number, string> } } }).model
       .config;
     labelMap = cfg.id2label ?? {};
+    console.info('[ner.worker] 모델 로드 완료', {
+      backend,
+      labels: Object.keys(labelMap).length,
+      ms: elapsedMs(startedAt),
+    });
     return { labelMap, backend };
   },
   async classify(text: string): Promise<Entity[]> {
     if (!classifier) throw new Error('classifier not loaded');
     const SCORE_FLOOR = 0.5;
+    const startedAt = performance.now();
+    console.info('[ner.worker] classify 시작', {
+      backend,
+      chars: text.length,
+    });
     const out = await classifier(text, { aggregation_strategy: 'simple' });
-    return out.filter((e) => e.score >= SCORE_FLOOR);
+    const scored = out.filter((e) => e.score >= SCORE_FLOOR);
+    const normalized = normalizeEntities(text, scored);
+    if (normalized.skippedWithoutOffsets > 0) {
+      console.info('[ner.worker] char offset 을 복원하지 못한 entity 가 있습니다.', {
+        skippedWithoutOffsets: normalized.skippedWithoutOffsets,
+      });
+    }
+    console.info('[ner.worker] classify 완료', {
+      backend,
+      chars: text.length,
+      rawEntities: out.length,
+      entities: normalized.entities.length,
+      inferredOffsets: normalized.inferredOffsets,
+      skippedWithoutOffsets: normalized.skippedWithoutOffsets,
+      ms: elapsedMs(startedAt),
+    });
+    return normalized.entities;
   },
   async unload() {
     classifier = null;
@@ -47,3 +91,267 @@ const api: NerWorkerApi = {
 };
 
 Comlink.expose(api);
+
+const originalFetch = env.fetch;
+env.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const modelPath = getModelRelativePath(input);
+  if (modelPath && activeModelDir) {
+    return responseFromModelDir(activeModelDir, modelPath);
+  }
+  return originalFetch(requestUrl(input), init);
+};
+
+function isDirectoryHandle(value: unknown): value is FileSystemDirectoryHandle {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as {
+    kind?: unknown;
+    getFileHandle?: unknown;
+    getDirectoryHandle?: unknown;
+  };
+  return (
+    candidate.kind === 'directory' &&
+    typeof candidate.getFileHandle === 'function' &&
+    typeof candidate.getDirectoryHandle === 'function'
+  );
+}
+
+function getModelRelativePath(input: RequestInfo | URL): string | null {
+  const raw = requestUrl(input);
+  const path = raw.startsWith('/') ? raw : urlPathname(raw);
+  if (!path) return null;
+
+  const pathname = path.split(/[?#]/, 1)[0] ?? '';
+  const prefix = '/models/privacy-filter/';
+  if (!pathname.startsWith(prefix)) return null;
+
+  const relativePath = decodeURIComponent(pathname.slice(prefix.length));
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length === 0 || parts.some((part) => part === '..' || part.includes('\\'))) {
+    return null;
+  }
+  return parts.join('/');
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+function urlPathname(raw: string): string | null {
+  try {
+    return new URL(raw).pathname;
+  } catch {
+    return null;
+  }
+}
+
+async function responseFromModelDir(
+  root: FileSystemDirectoryHandle,
+  relativePath: string,
+): Promise<Response> {
+  try {
+    const file = await readFileFromDir(root, relativePath);
+    console.info('[ner.worker] 모델 파일 로드', {
+      path: relativePath,
+      bytes: file.size,
+    });
+    return new Response(file.stream(), {
+      status: 200,
+      headers: {
+        'Content-Length': String(file.size),
+        'Content-Type': contentTypeFor(relativePath),
+      },
+    });
+  } catch {
+    return new Response(null, { status: 404, statusText: 'Not Found' });
+  }
+}
+
+async function readFileFromDir(
+  root: FileSystemDirectoryHandle,
+  relativePath: string,
+): Promise<File> {
+  const parts = relativePath.split('/').filter(Boolean);
+  let dir = root;
+  for (const part of parts.slice(0, -1)) {
+    dir = await dir.getDirectoryHandle(part);
+  }
+  const fileName = parts.at(-1);
+  if (!fileName) throw new Error('모델 파일 경로가 비어 있습니다.');
+  const fileHandle = await dir.getFileHandle(fileName);
+  return fileHandle.getFile();
+}
+
+function contentTypeFor(path: string): string {
+  if (path.endsWith('.json')) return 'application/json';
+  if (path.endsWith('.txt')) return 'text/plain;charset=utf-8';
+  if (path.endsWith('.onnx') || path.endsWith('.onnx_data')) {
+    return 'application/octet-stream';
+  }
+  return 'application/octet-stream';
+}
+
+function normalizeEntities(
+  text: string,
+  entities: RawEntity[],
+): { entities: Entity[]; inferredOffsets: number; skippedWithoutOffsets: number } {
+  const normalized: Entity[] = [];
+  let inferredOffsets = 0;
+  let skippedWithoutOffsets = 0;
+  let cursor = 0;
+
+  for (const entity of entities) {
+    const label = entity.entity_group ?? entity.entity;
+    if (!label) {
+      skippedWithoutOffsets += 1;
+      continue;
+    }
+
+    let hasProvidedOffsets = false;
+    let span: { start: number; end: number } | null;
+    if (
+      typeof entity.start === 'number' &&
+      typeof entity.end === 'number' &&
+      entity.start >= 0 &&
+      entity.end > entity.start
+    ) {
+      hasProvidedOffsets = true;
+      span = trimSpan(text, entity.start, entity.end);
+    } else {
+      span = inferSpanFromWord(text, entity.word, cursor);
+    }
+
+    if (!span) {
+      skippedWithoutOffsets += 1;
+      continue;
+    }
+    if (!hasProvidedOffsets) inferredOffsets += 1;
+    cursor = Math.max(cursor, span.end);
+    normalized.push({
+      entity_group: label,
+      start: span.start,
+      end: span.end,
+      score: entity.score,
+      word: entity.word,
+    });
+  }
+
+  return { entities: normalized, inferredOffsets, skippedWithoutOffsets };
+}
+
+function inferSpanFromWord(
+  text: string,
+  decodedWord: string,
+  cursor: number,
+): { start: number; end: number } | null {
+  const variants = wordSearchVariants(decodedWord);
+
+  for (const variant of variants) {
+    const index = text.indexOf(variant, cursor);
+    if (index >= 0) return trimSpan(text, index, index + variant.length);
+  }
+  for (const variant of variants) {
+    const index = text.indexOf(variant);
+    if (index >= 0) return trimSpan(text, index, index + variant.length);
+  }
+  for (const variant of variants) {
+    const span = inferSpanWithFlexibleWhitespace(text, variant, cursor);
+    if (span) return trimSpan(text, span.start, span.end);
+  }
+  for (const variant of variants) {
+    const span = inferSpanWithFlexibleWhitespace(text, variant, 0);
+    if (span) return trimSpan(text, span.start, span.end);
+  }
+  for (const variant of variants) {
+    const span = inferSpanWithoutWhitespace(text, variant, cursor);
+    if (span) return trimSpan(text, span.start, span.end);
+  }
+  for (const variant of variants) {
+    const span = inferSpanWithoutWhitespace(text, variant, 0);
+    if (span) return trimSpan(text, span.start, span.end);
+  }
+  return null;
+}
+
+function wordSearchVariants(decodedWord: string): string[] {
+  const normalized = decodedWord.normalize('NFC');
+  const tokenizerCleaned = normalized
+    .replace(/##/g, '')
+    .replace(/[▁Ġ]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  return uniqueNonEmpty([
+    normalized,
+    normalized.trimStart(),
+    normalized.trim(),
+    tokenizerCleaned,
+    tokenizerCleaned.trimStart(),
+    tokenizerCleaned.trim(),
+  ]);
+}
+
+function inferSpanWithFlexibleWhitespace(
+  text: string,
+  variant: string,
+  cursor: number,
+): { start: number; end: number } | null {
+  if (!/\s/.test(variant)) return null;
+  const pattern = escapeRegExp(variant.trim()).replace(/\s+/g, '\\s+');
+  if (!pattern) return null;
+  const match = new RegExp(pattern, 'u').exec(text.slice(cursor));
+  if (!match || match.index < 0) return null;
+  const start = cursor + match.index;
+  return { start, end: start + match[0].length };
+}
+
+function inferSpanWithoutWhitespace(
+  text: string,
+  variant: string,
+  cursor: number,
+): { start: number; end: number } | null {
+  const needle = variant.replace(/\s+/g, '');
+  if (needle.length === 0) return null;
+
+  let compact = '';
+  const offsets: number[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (/\s/.test(text[i] ?? '')) continue;
+    if (i < cursor) {
+      continue;
+    }
+    compact += text[i];
+    offsets.push(i);
+  }
+
+  const index = compact.indexOf(needle);
+  if (index < 0) return null;
+  const start = offsets[index];
+  const last = offsets[index + needle.length - 1];
+  if (start === undefined || last === undefined) return null;
+  return { start, end: last + 1 };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function trimSpan(
+  text: string,
+  rawStart: number,
+  rawEnd: number,
+): { start: number; end: number } | null {
+  let start = Math.max(0, Math.min(rawStart, text.length));
+  let end = Math.max(start, Math.min(rawEnd, text.length));
+  while (start < end && /\s/.test(text[start] ?? '')) start += 1;
+  while (end > start && /\s/.test(text[end - 1] ?? '')) end -= 1;
+  if (end <= start) return null;
+  return { start, end };
+}
+
+function uniqueNonEmpty(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.length > 0))];
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.round(performance.now() - startedAt);
+}

@@ -1,8 +1,10 @@
 import { act } from 'react';
+import { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNerModel, useNerModelStore, type UseNerModel } from '@/hooks/useNerModel';
 import type { NerWorkerApi } from '@/core/nerWorkerClient';
+import { NER_MODEL_META_KEY, type ModelMeta } from '@/core/nerModel';
 
 const { fakeWorker } = vi.hoisted(() => ({
   fakeWorker: {
@@ -117,5 +119,45 @@ describe('useNerModel', () => {
 
     expect(requireSession(first).state).toBe('ready');
     expect(requireSession(second).state).toBe('ready');
+    expect(fakeWorker.load).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'directory' }),
+    );
+  });
+
+  it('StrictMode 의 첫 effect cleanup 이후에도 캐시 자동 로드를 ready 로 완료한다', async () => {
+    const cachedMeta: ModelMeta = {
+      id: 'cached-model',
+      modelName: 'openai/privacy-filter',
+      loadedAt: Date.now(),
+      labelMap: { 0: 'O' },
+    };
+    localStorage.setItem(NER_MODEL_META_KEY, JSON.stringify(cachedMeta));
+    let session: UseNerModel | null = null;
+
+    function Probe() {
+      session = useNerModel();
+      return null;
+    }
+
+    const container = document.createElement('div');
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <StrictMode>
+          <Probe />
+        </StrictMode>,
+      );
+    });
+
+    for (let i = 0; i < 20 && requireSession(session).state !== 'ready'; i += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+
+    expect(requireSession(session).state).toBe('ready');
+    expect(fakeWorker.load).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'directory' }),
+    );
   });
 });
