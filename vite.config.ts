@@ -46,9 +46,10 @@ function stripMupdfWasmAsset(): Plugin {
  *   const wasmPathPrefix = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ONNX_ENV.versions.web}/dist/`;
  *   ONNX_ENV.wasm.wasmPaths = ... { mjs: `${wasmPathPrefix}...`, wasm: `${wasmPathPrefix}...` }
  *
- * 우리는 `configureNerEnv()` 에서 `wasmPaths = '/ort/'` 로 덮어써 실제 런타임 fetch 는
- * jsdelivr 로 가지 않지만, 위 jsdelivr 템플릿 리터럴이 산출 HTML 에 dead-string 으로 남아
- * `verify-no-external` 가 차단한다 (외부 네트워크 0 정책의 string-scan 가드).
+ * 우리는 NER 워커에서 `wasmPaths = { wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm' }` 로
+ * 덮어써 실제 런타임 fetch 는 jsdelivr 로 가지 않지만, 위 jsdelivr 템플릿 리터럴이 산출
+ * HTML 에 dead-string 으로 남아 `verify-no-external` 가 차단한다 (외부 네트워크 0 정책의
+ * string-scan 가드).
  *
  * 정책상 jsdelivr URL 은 allow list 에 절대 추가하지 않는다. 따라서 mupdf 처럼 빌드 시점에
  * 리터럴을 비파괴적으로 무력화 (jsdelivr → about:blank/) 한다. configureNerEnv 의 override 가
@@ -92,12 +93,13 @@ function stripOnnxJsdelivrDefault(): Plugin {
  *
  * Vite 의 asset emit 은 두 패턴을 각각 별도 wasm 자산으로 처리할 수 있다.
  *
- * `configureNerEnv()` 가 항상 `wasm.wasmPaths = '/ort/'` 를 미리 세팅하므로 (2) 의 분기 (`!i.in.wasm.wasmPaths`)
- * 는 런타임에서 절대 truthy 가 되지 않는다. 따라서 (2) 의 `new URL(...)` 표현식 자체를
- * 빈 문자열 리터럴로 치환해 불필요한 proxy fallback 자산 emit 을 회피한다.
+ * NER 워커가 항상 `wasm.wasmPaths = { wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm' }` 를 미리
+ * 세팅하므로 (2) 의 분기 (`!i.in.wasm.wasmPaths`) 는 런타임에서 절대 truthy 가 되지 않는다.
+ * 따라서 (2) 의 `new URL(...)` 표현식 자체를 빈 문자열 리터럴로 치환해 불필요한 proxy fallback
+ * 자산 emit 을 회피한다.
  *
- * (1) 은 그대로 둔다. 서버 배포에서는 `/ort/` wasmPaths 가 우선이고, fallback URL 은
- * wasmPaths 가 비어 있을 때만 사용된다.
+ * (1) 은 그대로 둔다. 서버 배포에서는 `/ort/ort-wasm-simd-threaded.jsep.wasm` override 가
+ * 우선이고, fallback URL 은 wasmPaths 가 비어 있을 때만 사용된다.
  *
  * 패턴이 변하면 onnxruntime-web 가 업그레이드된 것이므로 빌드를 실패시켜 회귀를 명시화한다.
  */
@@ -122,6 +124,86 @@ function stripOnnxProxyWasmDataUrl(): Plugin {
         code: code.replace(needle, replacement),
         map: null,
       };
+    },
+  };
+}
+
+/**
+ * PaddleOCR.js and its browser-only transitive dependencies ship default model,
+ * CDN, documentation, and license URL literals in their bundles. Runtime OCR uses
+ * explicit same-origin assets in `ocr.worker.ts`, but these defaults remain as
+ * dead strings and are intentionally blocked by postbuild.
+ */
+function stripPaddleOcrExternalDefaults(): Plugin {
+  const replacements: Array<[string, string]> = [
+    [
+      'https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/',
+      'same-origin-paddle-models/',
+    ],
+    ['https://cdn.jsdelivr.net/npm/onnxruntime-web@', 'same-origin-onnxruntime-web@'],
+    ['https://github.com/nodeca/js-yaml', 'license-js-yaml'],
+    ['http://www.apache.org/licenses/LICENSE-2.0', 'license-apache-2.0'],
+    ['http://www.angusj.com', 'license-clipper-homepage'],
+    ['http://www.boost.org/LICENSE_1_0.txt', 'license-boost-1.0'],
+    ['http://portal.acm.org/citation.cfm?id=129906', 'reference-vatti-clipping'],
+    ['http://books.google.com/books?q=vatti+clipping+agoston', 'reference-vatti-agoston'],
+    [
+      'http://www.me.berkeley.edu/~mcmains/pubs/DAC05OffsetPolygon.pdf',
+      'reference-offset-polygon',
+    ],
+    ['http://jsperf.com/big-integer-library-test', 'reference-jsbn-benchmark'],
+    ['http://www-cs-students.stanford.edu/~tjw/jsbn/LICENSE', 'license-jsbn'],
+    ['http://www-cs-students.stanford.edu/~tjw/jsbn/', 'reference-jsbn-homepage'],
+    ['http://jsperf.com/truncate-float-to-integer/2', 'reference-truncate-float-2'],
+    ['http://jsperf.com/truncate-float-to-integer', 'reference-truncate-float'],
+    ['http://jsperf.com/fastest-round', 'reference-fastest-round'],
+    [
+      'http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf',
+      'reference-perpendicular-distance-paper',
+    ],
+    ['http://en.wikipedia.org/wiki/Perpendicular_distance', 'reference-perpendicular-distance'],
+  ];
+
+  const strip = (code: string): string => {
+    let next = code;
+    for (const [needle, replacement] of replacements) {
+      next = next.split(needle).join(replacement);
+    }
+    return next;
+  };
+
+  return {
+    name: 'strip-paddleocr-external-defaults',
+    enforce: 'post',
+    transform(code, id) {
+      if (
+        !id.includes('@paddleocr/paddleocr-js') &&
+        !id.includes('onnxruntime-web') &&
+        !id.includes('js-yaml')
+      ) {
+        return null;
+      }
+
+      const next = strip(code);
+      return next === code ? null : { code: next, map: null };
+    },
+    renderChunk(code) {
+      const next = strip(code);
+      return next === code ? null : { code: next, map: null };
+    },
+    generateBundle(_options, bundle) {
+      for (const entry of Object.values(bundle)) {
+        if (entry.type === 'chunk') {
+          entry.code = strip(entry.code);
+          continue;
+        }
+
+        if (entry.fileName.endsWith('.js') || entry.fileName.endsWith('.mjs')) {
+          const source =
+            typeof entry.source === 'string' ? entry.source : new TextDecoder().decode(entry.source);
+          entry.source = strip(source);
+        }
+      }
     },
   };
 }
@@ -290,12 +372,32 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       stripMupdfWasmAsset(),
+      stripPaddleOcrExternalDefaults(),
       ...(isNlp
         ? [pocModelServer(), ortRuntimeServer(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
         : []),
       ...(useSingleFile ? [deferredWasmModuleWorker(), viteSingleFile()] : []),
     ],
-    resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+    resolve: {
+      alias: [
+        {
+          find: /^@paddleocr\/paddleocr-js$/,
+          replacement: path.resolve(
+            __dirname,
+            './node_modules/@paddleocr/paddleocr-js/dist/index.mjs',
+          ),
+        },
+        {
+          find: /^@techstark\/opencv-js$/,
+          replacement: path.resolve(__dirname, './src/vendor/opencv-js.ts'),
+        },
+        {
+          find: /^clipper-lib$/,
+          replacement: path.resolve(__dirname, './src/vendor/clipper-lib.ts'),
+        },
+        { find: '@', replacement: path.resolve(__dirname, 'src') },
+      ],
+    },
     // React DOM 19 는 Navigation API 가 있으면 synthetic navigation 을 시작한다.
     // singlefile 모드를 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
     // 차단하므로, 빌드 모드와 무관하게 전역 navigation 참조를 번들 시점에 제거한다.
@@ -312,8 +414,12 @@ export default defineConfig(({ mode }) => {
     // `/node_modules/.vite/deps/mupdf.js` 로 rewrite 해 dev 에서 404 를 일으킨다.
     // exclude 로 사전 번들링을 끄고 node_modules 경로를 그대로 서빙한다.
     // (런타임에 `process` 가 undefined 이므로 Node 분기는 실행되지 않는다.)
+    //
+    // @paddleocr/paddleocr-js 도 사전 번들링에서 제외한다. 이 프로젝트에는
+    // transformers.js 가 끌고 온 다른 onnxruntime-web 버전도 함께 설치되어 있으므로,
+    // PaddleOCR 패키지가 자기 하위 onnxruntime-web 런타임을 해석하도록 원본 ESM 경로를 유지한다.
     optimizeDeps: {
-      exclude: ['mupdf'],
+      exclude: ['mupdf', '@paddleocr/paddleocr-js'],
     },
     worker: {
       // mupdf.js 는 top-level await 를 사용하므로 IIFE 가 아닌 ES 모듈 워커가 필요.
@@ -328,8 +434,13 @@ export default defineConfig(({ mode }) => {
       // 이중 인라인을 방지한다.
       plugins: () =>
         isNlp
-          ? [stripMupdfWasmAsset(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
-          : [stripMupdfWasmAsset()],
+          ? [
+              stripMupdfWasmAsset(),
+              stripPaddleOcrExternalDefaults(),
+              stripOnnxJsdelivrDefault(),
+              stripOnnxProxyWasmDataUrl(),
+            ]
+          : [stripMupdfWasmAsset(), stripPaddleOcrExternalDefaults()],
       rollupOptions: {
         // mupdf 가 내부에서 dynamic import 를 사용하므로 워커 번들을 단일 청크로 만든다.
         // 기본 서버 배포에서는 별도 워커 자산으로 emit 되고, singlefile 모드에서는 inline 된다.
