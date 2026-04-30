@@ -22,6 +22,7 @@ export const ALL_RULES: DetectorRule[] = [
 export function runDetectors(
   lines: LineForScan[],
   rules: DetectorRule[] = ALL_RULES,
+  source: Candidate['source'] = 'auto',
 ): Candidate[] {
   const out: Candidate[] = [];
   for (const line of lines) {
@@ -40,7 +41,7 @@ export function runDetectors(
           text: m.matched,
           category: rule.category,
           confidence: m.confidence,
-          source: 'auto',
+          source,
         });
       }
     }
