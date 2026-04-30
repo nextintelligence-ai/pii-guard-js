@@ -126,4 +126,90 @@ describe('NER 문맥 재구성', () => {
       score: 0.97,
     });
   });
+
+  it('소득자 성명 다음 줄 이름은 한 줄 문맥으로 재구성하고 이름만 원본 좌표로 되돌린다', () => {
+    const maps = buildContextualNerMaps([
+      line(0, '소득자 성명'),
+      line(1, '박태순'),
+      line(2, '주민등록번호'),
+      line(3, '801129-1031511'),
+    ]);
+
+    expect(maps).toHaveLength(1);
+    const map = maps[0]!;
+    expect(map.pageText).toBe('소득자 성명 박태순');
+
+    const boxes = entitiesToBoxes(map, [
+      {
+        entity_group: 'private_person',
+        start: map.pageText.indexOf('박태순'),
+        end: map.pageText.indexOf('박태순') + '박태순'.length,
+        score: 0.97,
+      },
+    ]);
+
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).toMatchObject({
+      category: 'private_person',
+      bbox: { x: 0, y: 20, w: 30, h: 12 },
+      score: 0.97,
+    });
+  });
+
+  it('번호가 붙은 성명 라벨 다음 줄 이름도 한 줄 문맥으로 재구성한다', () => {
+    const maps = buildContextualNerMaps([
+      line(0, '① 성 명'),
+      line(1, '박태순'),
+      line(2, '② 주민등록번호'),
+      line(3, '801129-1031511'),
+    ]);
+
+    expect(maps).toHaveLength(1);
+    const map = maps[0]!;
+    expect(map.pageText).toBe('① 성 명 박태순');
+
+    const boxes = entitiesToBoxes(map, [
+      {
+        entity_group: 'private_person',
+        start: 0,
+        end: map.pageText.length,
+        score: 0.91,
+      },
+    ]);
+
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).toMatchObject({
+      category: 'private_person',
+      bbox: { x: 0, y: 20, w: 30, h: 12 },
+      score: 0.91,
+    });
+  });
+
+  it('제출자 서명란은 이름 뒤 안내 문구를 문맥으로만 쓰고 이름만 원본 좌표로 되돌린다', () => {
+    const maps = buildContextualNerMaps([
+      line(0, '제출자'),
+      line(1, '박태순  (서명 또는 인)'),
+      line(2, '세무서장'),
+    ]);
+
+    expect(maps).toHaveLength(1);
+    const map = maps[0]!;
+    expect(map.pageText).toBe('제출자 박태순  (서명 또는 인)');
+
+    const boxes = entitiesToBoxes(map, [
+      {
+        entity_group: 'private_person',
+        start: 0,
+        end: map.pageText.length,
+        score: 0.99,
+      },
+    ]);
+
+    expect(boxes).toHaveLength(1);
+    expect(boxes[0]).toMatchObject({
+      category: 'private_person',
+      bbox: { x: 0, y: 20, w: 30, h: 12 },
+      score: 0.99,
+    });
+  });
 });

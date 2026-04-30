@@ -68,6 +68,59 @@ export function buildContextualNerMaps(lines: StructuredLine[]): PageMap[] {
   const splitNameMap = buildSplitNameLabelMap(sourceLines);
   if (splitNameMap) maps.push(splitNameMap);
 
+  const nextLineNameMaps = buildNextLineNameLabelMaps(sourceLines);
+  maps.push(...nextLineNameMaps);
+
+  const signatureNameMaps = buildSignatureNameMaps(sourceLines);
+  maps.push(...signatureNameMaps);
+
+  return maps;
+}
+
+function buildNextLineNameLabelMaps(lines: SourceLine[]): PageMap[] {
+  const maps: PageMap[] = [];
+
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const labelLine = trimSourceLine(lines[i]!);
+    if (!isNameLabelLine(labelLine.text)) continue;
+
+    const nameLine = trimSourceLine(lines[i + 1]!);
+    if (!isLikelyNameContextLine(nameLine.text)) continue;
+    if (!hasNextLineNameContext(lines, i)) continue;
+
+    maps.push(
+      buildMapFromContextChars([
+        ...labelLine.chars.map(toIgnoredContextChar),
+        syntheticIgnoredSpace(nameLine),
+        ...nameLine.chars.map(toEmittedContextChar),
+      ]),
+    );
+  }
+
+  return maps;
+}
+
+function buildSignatureNameMaps(lines: SourceLine[]): PageMap[] {
+  const maps: PageMap[] = [];
+
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const labelLine = trimSourceLine(lines[i]!);
+    if (labelLine.text !== '제출자') continue;
+
+    const signedLine = trimSourceLine(lines[i + 1]!);
+    const split = splitLeadingNameContextLine(signedLine);
+    if (!split || !signedLine.text.includes('서명')) continue;
+
+    maps.push(
+      buildMapFromContextChars([
+        ...labelLine.chars.map(toIgnoredContextChar),
+        syntheticIgnoredSpace(split.name),
+        ...split.name.chars.map(toEmittedContextChar),
+        ...split.suffix.chars.map(toIgnoredContextChar),
+      ]),
+    );
+  }
+
   return maps;
 }
 
@@ -101,6 +154,22 @@ function hasCertificateNameContext(lines: SourceLine[], labelIndex: number): boo
     .map((line) => line.text.trim());
 
   return nearbyBefore.includes('신청대상자') || nearbyAfter.includes('주민등록번호');
+}
+
+function hasNextLineNameContext(lines: SourceLine[], labelIndex: number): boolean {
+  const nearbyAfter = lines
+    .slice(labelIndex + 2, Math.min(lines.length, labelIndex + 6))
+    .map((line) => line.text.trim());
+  return nearbyAfter.some(isResidentIdLabelLine);
+}
+
+function isNameLabelLine(text: string): boolean {
+  const compact = text.replace(/\s+/g, '');
+  return compact.endsWith('성명') || compact === '소득자성명';
+}
+
+function isResidentIdLabelLine(text: string): boolean {
+  return text.replace(/\s+/g, '').includes('주민등록번호');
 }
 
 function hasContactTableHeaders(lines: SourceLine[], headerIndex: number): boolean {
@@ -152,6 +221,30 @@ function trimSourceLine(line: SourceLine): SourceLine {
     id: line.id,
     text: chars.map((c) => c.ch).join(''),
     chars,
+  };
+}
+
+function splitLeadingNameContextLine(
+  line: SourceLine,
+): { name: SourceLine; suffix: SourceLine } | null {
+  const match = /^[가-힣]{2,4}/.exec(line.text);
+  if (!match) return null;
+  const nameText = match[0];
+  if (!isLikelyNameContextLine(nameText)) return null;
+
+  const nameChars = line.chars.slice(0, nameText.length);
+  const suffixChars = line.chars.slice(nameText.length);
+  return {
+    name: {
+      id: line.id,
+      text: nameChars.map((c) => c.ch).join(''),
+      chars: nameChars,
+    },
+    suffix: {
+      id: line.id,
+      text: suffixChars.map((c) => c.ch).join(''),
+      chars: suffixChars,
+    },
   };
 }
 

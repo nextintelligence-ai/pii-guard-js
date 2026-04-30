@@ -385,4 +385,131 @@ describe('NER 플로우 통합', () => {
     expect(nerBoxes).toHaveLength(1);
     expect(nerBoxes[0]?.bbox).toEqual([0, 50, 15, 60]);
   });
+
+  it('소득자 성명 다음 줄 이름은 한 줄 문맥으로 재구성해 보강한다', async () => {
+    const certificateLines = [
+      '소득자 성명',
+      '박태순',
+      '주민등록번호',
+      '801129-1031511',
+    ];
+    fakePdfWorker.extractStructuredText.mockResolvedValueOnce(
+      certificateLines.map((text, lineId) => ({
+        id: lineId,
+        spans: [
+          {
+            id: lineId,
+            chars: [...text].map((ch, i) => ({
+              ch,
+              bbox: { x: i * 5, y: lineId * 10, w: 5, h: 10 },
+            })),
+          },
+        ],
+      })),
+    );
+    fakeWorker.classify.mockImplementation(async (text: string) => {
+      if (text === '소득자 성명 박태순') {
+        return [
+          {
+            entity_group: 'private_person',
+            start: text.indexOf('박태순'),
+            end: text.indexOf('박태순') + '박태순'.length,
+            score: 0.97,
+            word: ' 박태순',
+          },
+        ];
+      }
+      return [];
+    });
+
+    function Probe() {
+      useNerDetect(1, 0);
+      return null;
+    }
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().nerProgress.done === 1);
+
+    const nerBoxes = Object.values(useAppStore.getState().boxes).filter(
+      (box) => box.source === 'ner' && box.category === 'private_person',
+    );
+    expect(fakeWorker.classify).toHaveBeenCalledTimes(2);
+    expect(nerBoxes).toHaveLength(1);
+    expect(nerBoxes[0]?.bbox).toEqual([0, 10, 15, 20]);
+  });
+
+  it('번호가 붙은 성명 라벨과 제출자 서명란 이름을 문맥 NER 로 보강한다', async () => {
+    const certificateLines = [
+      '① 성 명',
+      '박태순',
+      '② 주민등록번호',
+      '801129-1031511',
+      '제출자',
+      '박태순  (서명 또는 인)',
+      '세무서장',
+    ];
+    fakePdfWorker.extractStructuredText.mockResolvedValueOnce(
+      certificateLines.map((text, lineId) => ({
+        id: lineId,
+        spans: [
+          {
+            id: lineId,
+            chars: [...text].map((ch, i) => ({
+              ch,
+              bbox: { x: i * 5, y: lineId * 10, w: 5, h: 10 },
+            })),
+          },
+        ],
+      })),
+    );
+    fakeWorker.classify.mockImplementation(async (text: string) => {
+      if (text === '① 성 명 박태순') {
+        return [
+          {
+            entity_group: 'private_person',
+            start: 0,
+            end: text.length,
+            score: 0.91,
+            word: ' 성 명 박태순',
+          },
+        ];
+      }
+      if (text === '제출자 박태순  (서명 또는 인)') {
+        return [
+          {
+            entity_group: 'private_person',
+            start: 0,
+            end: text.length,
+            score: 0.99,
+            word: ' 박태순  (서명 또는 인)',
+          },
+        ];
+      }
+      return [];
+    });
+
+    function Probe() {
+      useNerDetect(1, 0);
+      return null;
+    }
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().nerProgress.done === 1);
+
+    const nerBoxes = Object.values(useAppStore.getState().boxes)
+      .filter((box) => box.source === 'ner' && box.category === 'private_person')
+      .sort((a, b) => a.bbox[1] - b.bbox[1]);
+    expect(fakeWorker.classify).toHaveBeenCalledTimes(3);
+    expect(nerBoxes).toHaveLength(2);
+    expect(nerBoxes[0]?.bbox).toEqual([0, 10, 15, 20]);
+    expect(nerBoxes[1]?.bbox).toEqual([0, 50, 15, 60]);
+  });
 });
