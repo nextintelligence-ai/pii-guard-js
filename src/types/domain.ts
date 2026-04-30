@@ -20,7 +20,7 @@ export type DetectionCategory =
   | 'private_date'
   | 'secret';
 
-export type CandidateSource = 'auto' | 'ner';
+export type CandidateSource = 'auto' | 'ner' | 'ocr';
 
 export type Candidate = {
   id: string;
@@ -32,7 +32,7 @@ export type Candidate = {
   source: CandidateSource;
 };
 
-export type RedactionBoxSource = 'auto' | 'ner' | 'text-select' | 'manual-rect';
+export type RedactionBoxSource = 'auto' | 'ner' | 'ocr' | 'text-select' | 'manual-rect';
 
 export type RedactionBox = {
   id: string;
@@ -50,6 +50,20 @@ export type PageMeta = {
   heightPt: number;
   rotation: 0 | 90 | 180 | 270;
 };
+
+export type OcrPageStatus = 'idle' | 'queued' | 'running' | 'done' | 'failed';
+
+export type OcrProgress = {
+  done: number;
+  total: number;
+  currentPage: number | null;
+  byPage: Record<number, { status: OcrPageStatus; message?: string }>;
+};
+
+export type OcrRequest =
+  | { kind: 'idle' }
+  | { kind: 'page'; pageIndex: number; nonce: number }
+  | { kind: 'all'; nonce: number };
 
 export type ApplyReport = {
   totalBoxes: number;

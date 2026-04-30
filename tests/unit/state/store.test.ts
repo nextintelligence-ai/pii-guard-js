@@ -106,4 +106,237 @@ describe('AppStore', () => {
     expect(boxes[0]?.enabled).toBe(false);
     expect(boxes[1]?.enabled).toBe(true);
   });
+
+  it('OCR 후보는 기존 candidates 와 boxes 에 source ocr 로 추가된다', () => {
+    const s = useAppStore.getState();
+    s.addOcrCandidates([
+      {
+        id: 'ocr-rrn-1',
+        pageIndex: 0,
+        bbox: [10, 20, 80, 34],
+        text: '801129-1234567',
+        category: 'rrn',
+        confidence: 0.91,
+        source: 'ocr',
+      },
+    ]);
+
+    const state = useAppStore.getState();
+    expect(state.candidates).toHaveLength(1);
+    expect(state.candidates[0]).toMatchObject({ source: 'ocr', category: 'rrn' });
+    expect(state.boxes['ocr-rrn-1']).toMatchObject({
+      source: 'ocr',
+      category: 'rrn',
+      enabled: true,
+    });
+  });
+
+  it('OCR 진행 상태를 페이지 단위로 갱신하고 reset 시 초기화한다', () => {
+    const s = useAppStore.getState();
+    s.setOcrProgress({
+      done: 1,
+      total: 3,
+      currentPage: 1,
+      byPage: {
+        0: { status: 'done' },
+        1: { status: 'running' },
+        2: { status: 'queued' },
+      },
+    });
+
+    expect(useAppStore.getState().ocrProgress.currentPage).toBe(1);
+    expect(useAppStore.getState().ocrProgress.byPage[2]?.status).toBe('queued');
+
+    s.reset();
+
+    expect(useAppStore.getState().ocrProgress).toEqual({
+      done: 0,
+      total: 0,
+      currentPage: null,
+      byPage: {},
+    });
+  });
+
+  it('새 OCR 후보를 추가할 때 다른 페이지의 기존 OCR 후보는 유지한다', () => {
+    const s = useAppStore.getState();
+    s.addOcrCandidates([
+      {
+        id: 'ocr-page-0',
+        pageIndex: 0,
+        bbox: [0, 0, 10, 10],
+        text: 'first@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    s.addOcrCandidates([
+      {
+        id: 'ocr-page-1',
+        pageIndex: 1,
+        bbox: [20, 0, 30, 10],
+        text: 'second@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    expect(useAppStore.getState().candidates.map((c) => c.id).sort()).toEqual([
+      'ocr-page-0',
+      'ocr-page-1',
+    ]);
+    expect(Object.keys(useAppStore.getState().boxes).sort()).toEqual([
+      'ocr-page-0',
+      'ocr-page-1',
+    ]);
+  });
+
+  it('카테고리 토글은 OCR 박스도 함께 갱신한다', () => {
+    const s = useAppStore.getState();
+    s.addOcrCandidates([
+      {
+        id: 'ocr-phone-1',
+        pageIndex: 0,
+        bbox: [0, 0, 10, 10],
+        text: '010-1234-5678',
+        category: 'phone',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    s.toggleCategory('phone');
+
+    expect(useAppStore.getState().boxes['ocr-phone-1']?.enabled).toBe(false);
+  });
+
+  it('빈 OCR 결과로 페이지를 다시 처리하면 해당 페이지 OCR 후보와 박스만 삭제한다', () => {
+    const s = useAppStore.getState();
+    const autoCandidate = {
+      id: 'auto-page-0',
+      pageIndex: 0,
+      bbox: [40, 0, 60, 10],
+      text: 'kept@example.com',
+      category: 'email',
+      confidence: 1,
+      source: 'auto',
+    } as const;
+    s.setCandidates([autoCandidate]);
+    s.addAutoBox(autoCandidate);
+    s.addOcrCandidates([
+      {
+        id: 'ocr-page-0',
+        pageIndex: 0,
+        bbox: [0, 0, 10, 10],
+        text: 'stale@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+      {
+        id: 'ocr-page-1',
+        pageIndex: 1,
+        bbox: [20, 0, 30, 10],
+        text: 'kept-ocr@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    s.addOcrCandidates([], [0]);
+
+    expect(useAppStore.getState().candidates.map((c) => c.id).sort()).toEqual([
+      'auto-page-0',
+      'ocr-page-1',
+    ]);
+    expect(Object.keys(useAppStore.getState().boxes).sort()).toEqual([
+      'auto-page-0',
+      'ocr-page-1',
+    ]);
+  });
+
+  it('같은 페이지 OCR 재실행은 기존 OCR ID 를 새 결과로 교체한다', () => {
+    const s = useAppStore.getState();
+    const autoCandidate = {
+      id: 'auto-page-0',
+      pageIndex: 0,
+      bbox: [40, 0, 60, 10],
+      text: 'kept@example.com',
+      category: 'email',
+      confidence: 1,
+      source: 'auto',
+    } as const;
+    s.setCandidates([autoCandidate]);
+    s.addAutoBox(autoCandidate);
+    s.addOcrCandidates([
+      {
+        id: 'ocr-old-page-0',
+        pageIndex: 0,
+        bbox: [0, 0, 10, 10],
+        text: 'old@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+      {
+        id: 'ocr-page-1',
+        pageIndex: 1,
+        bbox: [20, 0, 30, 10],
+        text: 'kept-ocr@example.com',
+        category: 'email',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    s.addOcrCandidates(
+      [
+        {
+          id: 'ocr-new-page-0',
+          pageIndex: 0,
+          bbox: [2, 2, 12, 12],
+          text: 'new@example.com',
+          category: 'email',
+          confidence: 0.95,
+          source: 'ocr',
+        },
+      ],
+      [0],
+    );
+
+    expect(useAppStore.getState().candidates.map((c) => c.id).sort()).toEqual([
+      'auto-page-0',
+      'ocr-new-page-0',
+      'ocr-page-1',
+    ]);
+    expect(Object.keys(useAppStore.getState().boxes).sort()).toEqual([
+      'auto-page-0',
+      'ocr-new-page-0',
+      'ocr-page-1',
+    ]);
+  });
+
+  it('오래된 OCR 요청 clear 는 더 최신 요청을 초기화하지 않는다', () => {
+    const s = useAppStore.getState();
+    s.requestOcrPage(0);
+    const first = useAppStore.getState().ocrRequest;
+    expect(first.kind).toBe('page');
+    const oldNonce = first.kind === 'idle' ? -1 : first.nonce;
+
+    s.clearOcrRequest(oldNonce);
+    expect(useAppStore.getState().ocrRequest).toEqual({ kind: 'idle' });
+
+    s.requestOcrAll();
+    const second = useAppStore.getState().ocrRequest;
+    expect(second.kind).toBe('all');
+    const newNonce = second.kind === 'idle' ? -1 : second.nonce;
+    expect(newNonce).not.toBe(oldNonce);
+
+    s.clearOcrRequest(oldNonce);
+
+    expect(useAppStore.getState().ocrRequest).toEqual({ kind: 'all', nonce: newNonce });
+  });
 });

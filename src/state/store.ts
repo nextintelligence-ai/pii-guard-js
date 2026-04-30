@@ -4,6 +4,8 @@ import type {
   Bbox,
   Candidate,
   DetectionCategory,
+  OcrProgress,
+  OcrRequest,
   PageMeta,
   RedactionBox,
 } from '@/types/domain';
@@ -32,6 +34,8 @@ type State = {
   applyResult: ApplyReport | null;
   nerThreshold: number;
   nerProgress: NerProgress;
+  ocrProgress: OcrProgress;
+  ocrRequest: OcrRequest;
 };
 
 type Actions = {
@@ -41,8 +45,13 @@ type Actions = {
   setCandidates(list: Candidate[]): void;
   addAutoBox(c: Candidate): void;
   addNerCandidates(pageIndex: number, boxes: NerBox[]): void;
+  addOcrCandidates(list: Candidate[], pageIndexes?: number[]): void;
   addManualBox(b: { pageIndex: number; bbox: Bbox; label?: string }): string;
   addTextSelectBox(b: { pageIndex: number; bbox: Bbox }): string;
+  setOcrProgress(p: OcrProgress): void;
+  requestOcrPage(pageIndex: number): void;
+  requestOcrAll(): void;
+  clearOcrRequest(nonce: number): void;
   toggleBox(id: string): void;
   toggleCategory(cat: DetectionCategory): void;
   updateBox(id: string, patch: Partial<RedactionBox>): void;
@@ -82,7 +91,11 @@ const initial: State = {
   applyResult: null,
   nerThreshold: 0.7,
   nerProgress: { done: 0, total: 0 },
+  ocrProgress: { done: 0, total: 0, currentPage: null, byPage: {} },
+  ocrRequest: { kind: 'idle' },
 };
+
+let ocrRequestSeq = 0;
 
 export const useAppStore = create<State & Actions>((set, get) => ({
   ...initial,
@@ -197,6 +210,30 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     }));
     return id;
   },
+  addOcrCandidates(list, pageIndexes) {
+    if (list.length === 0 && pageIndexes === undefined) return;
+    set((s) => ({
+      ...mergeOcrCandidates(s, list, pageIndexes),
+    }));
+  },
+  setOcrProgress(p) {
+    set({ ocrProgress: p });
+  },
+  requestOcrPage(pageIndex) {
+    set(() => ({
+      ocrRequest: { kind: 'page', pageIndex, nonce: nextOcrRequestNonce() },
+    }));
+  },
+  requestOcrAll() {
+    set(() => ({ ocrRequest: { kind: 'all', nonce: nextOcrRequestNonce() } }));
+  },
+  clearOcrRequest(nonce) {
+    set((s) =>
+      s.ocrRequest.kind !== 'idle' && s.ocrRequest.nonce === nonce
+        ? { ocrRequest: { kind: 'idle' } }
+        : s,
+    );
+  },
   toggleBox(id) {
     undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
     set((s) => {
@@ -213,7 +250,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
       const confidenceById = buildNerConfidenceMap(s.candidates);
       for (const id in updated) {
         const box = updated[id]!;
-        if (box.source === 'auto' && box.category === cat) {
+        if ((box.source === 'auto' || box.source === 'ocr') && box.category === cat) {
           updated[id] = { ...box, enabled: next };
         } else if (box.source === 'ner' && box.category === cat) {
           updated[id] = {
@@ -291,6 +328,48 @@ export const useAppStore = create<State & Actions>((set, get) => ({
     set({ ...initial, docEpoch: get().docEpoch + 1 });
   },
 }));
+
+function mergeOcrCandidates(
+  s: State,
+  list: Candidate[],
+  pageIndexes?: number[],
+): Pick<State, 'candidates' | 'boxes'> {
+  const pages = new Set(pageIndexes ?? list.map((candidate) => candidate.pageIndex));
+  const boxes: Record<string, RedactionBox> = { ...s.boxes };
+
+  for (const id in boxes) {
+    const box = boxes[id]!;
+    if (box.source === 'ocr' && pages.has(box.pageIndex)) {
+      delete boxes[id];
+    }
+  }
+
+  for (const candidate of list) {
+    boxes[candidate.id] = {
+      id: candidate.id,
+      pageIndex: candidate.pageIndex,
+      bbox: candidate.bbox,
+      source: 'ocr',
+      category: candidate.category,
+      enabled: s.categoryEnabled[candidate.category] ?? true,
+    };
+  }
+
+  return {
+    candidates: [
+      ...s.candidates.filter(
+        (candidate) => !(candidate.source === 'ocr' && pages.has(candidate.pageIndex)),
+      ),
+      ...list,
+    ],
+    boxes,
+  };
+}
+
+function nextOcrRequestNonce(): number {
+  ocrRequestSeq += 1;
+  return ocrRequestSeq;
+}
 
 function buildNerConfidenceMap(candidates: Candidate[]): Map<string, number> {
   return new Map(
