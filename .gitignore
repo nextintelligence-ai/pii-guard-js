@@ -1,7 +1,9 @@
 node_modules
 dist
 dist-multi
+dist-nlp
 .worktrees
+.omc
 .omx
 .DS_Store
 *.log
