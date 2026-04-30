@@ -13,13 +13,15 @@
     "test:watch": "vitest",
     "lint": "tsc -b",
     "release": "node scripts/release.mjs",
-    "prebuild": "node scripts/embed-wasm.mjs",
-    "predev": "node scripts/embed-wasm.mjs",
-    "pretest": "node scripts/embed-wasm.mjs",
+    "prepare:assets": "node scripts/embed-wasm.mjs && node scripts/copy-ort-assets.mjs",
+    "prebuild": "npm run prepare:assets",
+    "predev": "npm run prepare:assets",
+    "pretest": "npm run prepare:assets",
     "postbuild": "node scripts/verify-no-external.mjs --target=dist"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "@paddleocr/paddleocr-js": "^0.3.2",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
