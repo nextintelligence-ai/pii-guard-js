@@ -1,3 +1,4 @@
+import './installOrtWarningFilter';
 import * as Comlink from 'comlink';
 import { env, pipeline } from '@huggingface/transformers';
 import type { NerWorkerApi, Entity } from '@/core/nerWorkerClient';

@@ -5,6 +5,10 @@ const captured = vi.hoisted(() => ({
   api: null as unknown,
 }));
 
+const moduleOrder = vi.hoisted(() => ({
+  transformersSawFilterInstalled: false,
+}));
+
 const hf = vi.hoisted(() => {
   const fallbackFetch = async (
     _input: RequestInfo | URL,
@@ -44,15 +48,29 @@ const hf = vi.hoisted(() => {
   };
 });
 
+const ortRuntime = vi.hoisted(() => ({
+  installWarnFilter: vi.fn(),
+  wasmFilePaths: { wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm' },
+}));
+
 vi.mock('comlink', () => ({
   expose: vi.fn((api: unknown) => {
     captured.api = api;
   }),
 }));
 
-vi.mock('@huggingface/transformers', () => ({
-  env: hf.env,
-  pipeline: hf.pipeline,
+vi.mock('@huggingface/transformers', () => {
+  moduleOrder.transformersSawFilterInstalled =
+    ortRuntime.installWarnFilter.mock.calls.length > 0;
+  return {
+    env: hf.env,
+    pipeline: hf.pipeline,
+  };
+});
+
+vi.mock('@/workers/ortRuntimePaths', () => ({
+  ORT_WASM_FILE_PATHS: ortRuntime.wasmFilePaths,
+  installOrtWarningFilter: ortRuntime.installWarnFilter,
 }));
 
 class FakeFileHandle {
@@ -129,6 +147,28 @@ describe('ner.worker', () => {
     vi.resetModules();
     vi.clearAllMocks();
     captured.api = null;
+    hf.env.allowRemoteModels = true;
+    hf.env.allowLocalModels = false;
+    hf.env.localModelPath = '';
+    hf.env.backends.onnx.wasm = {};
+    ortRuntime.installWarnFilter.mockClear();
+    moduleOrder.transformersSawFilterInstalled = false;
+  });
+
+  it('transformers 모듈 평가 전에 ORT warning filter 를 설치한다', async () => {
+    await import('@/workers/ner.worker');
+
+    expect(moduleOrder.transformersSawFilterInstalled).toBe(true);
+  });
+
+  it('ONNX Runtime mjs 는 번들 모듈을 쓰고 wasm 파일만 /ort 에서 fetch 하도록 설정한다', async () => {
+    await import('@/workers/ner.worker');
+
+    expect((hf.env.backends.onnx.wasm as { wasmPaths?: unknown }).wasmPaths).toEqual({
+      wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm',
+    });
+    expect((hf.env.backends.onnx.wasm as { numThreads?: unknown }).numThreads).toBe(1);
+    expect(ortRuntime.installWarnFilter).toHaveBeenCalled();
   });
 
   it('선택한 모델 디렉토리 handle 로 transformers 로컬 fetch 를 해소한다', async () => {
