@@ -101,6 +101,7 @@ export function useOcrDetect(): void {
             pageIndex,
             lines: result.lines.length,
             candidates: candidates.length,
+            textLines: result.lines.map((line) => line.text),
             renderScale: rendered.scale,
             runtime: result.runtime,
             metrics: result.metrics,
@@ -152,6 +153,7 @@ function logOcrSuccess(details: {
   pageIndex: number;
   lines: number;
   candidates: number;
+  textLines?: string[];
   renderScale?: number;
   runtime?: unknown;
   metrics?: unknown;
@@ -165,6 +167,10 @@ function logOcrSuccess(details: {
     candidates: details.candidates,
   };
   if (details.renderScale !== undefined) payload.renderScale = details.renderScale;
+  if (details.textLines !== undefined) {
+    payload.textLines = details.textLines;
+    payload.text = details.textLines.join('\n');
+  }
   if (details.runtime !== undefined) payload.runtime = details.runtime;
   if (details.metrics !== undefined) payload.metrics = details.metrics;
   if (details.recovered !== undefined) payload.recovered = details.recovered;

@@ -131,6 +131,8 @@ describe('OCR 탐지 플로우', () => {
         lines: 1,
         candidates: 1,
         renderScale: 2,
+        textLines: ['주민번호 801129-1234567'],
+        text: '주민번호 801129-1234567',
       }),
     );
   });
