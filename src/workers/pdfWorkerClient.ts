@@ -1,5 +1,5 @@
 import { wrap, type Remote } from 'comlink';
-import PdfWorker from './pdf.worker.ts?worker&inline';
+import PdfWorker from './pdf.worker.ts?worker';
 import { decodeMupdfWasm } from '@/wasm/decodeMupdfWasm';
 import type { PdfWorkerApi } from './pdf.worker.types';
 
@@ -8,7 +8,7 @@ let cached: Promise<Remote<PdfWorkerApi>> | null = null;
 /**
  * 워커를 1회 생성하고 init-wasm 핸드셰이크가 끝나야 comlink Remote 를 반환한다.
  *
- * 1. 새 Worker 생성 (vite `?worker&inline` ESM 워커, file:// 호환 플러그인 적용)
+ * 1. 새 Worker 생성 (Vite `?worker` ESM 워커를 별도 서버 자산으로 emit)
  * 2. base64 WASM 을 1회 디코드해 ArrayBuffer 를 transferable 로 전송 → 메인 메모리 즉시 해제
  * 3. 워커가 'wasm-ready' string 메시지를 보낼 때까지 대기
  *    - { type: 'init-error', message } 를 받으면 reject (워커 setWasmBinary/expose 가 throw 한 경우)

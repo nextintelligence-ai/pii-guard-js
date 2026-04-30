@@ -90,15 +90,14 @@ function stripOnnxJsdelivrDefault(): Plugin {
  *   2. **proxy worker 의 `init-wasm` 메시지 wasmPaths fallback** — proxy 모드에서 worker 에 보낼
  *      wasmPaths 가 비어있고 SharedArrayBuffer 가 없을 때 fallback.
  *
- * Vite 의 asset emit 은 두 패턴을 각각 별도 자산으로 처리해 동일한 wasm 을 base64 dataURL 로
- * **두 번** 인라인한다 (총 약 60MB → 사이즈 예산 70MB 가까이 압박).
+ * Vite 의 asset emit 은 두 패턴을 각각 별도 wasm 자산으로 처리할 수 있다.
  *
  * `configureNerEnv()` 가 항상 `wasm.wasmPaths = '/ort/'` 를 미리 세팅하므로 (2) 의 분기 (`!i.in.wasm.wasmPaths`)
  * 는 런타임에서 절대 truthy 가 되지 않는다. 따라서 (2) 의 `new URL(...)` 표현식 자체를
- * 빈 문자열 리터럴로 치환해 Vite 의 자산 emit 을 회피한다 — 산출 사이즈가 약 30MB 감소한다.
+ * 빈 문자열 리터럴로 치환해 불필요한 proxy fallback 자산 emit 을 회피한다.
  *
- * (1) 은 그대로 둔다. 이 분기는 본 빌드에서 file:// 더블클릭 동작 시 wasmPaths 가 dev 와 달리
- * 절대 fetch 가 안 되므로 (file:// 의 Same Origin Policy) wasm dataURL 이 유일한 inline 경로다.
+ * (1) 은 그대로 둔다. 서버 배포에서는 `/ort/` wasmPaths 가 우선이고, fallback URL 은
+ * wasmPaths 가 비어 있을 때만 사용된다.
  *
  * 패턴이 변하면 onnxruntime-web 가 업그레이드된 것이므로 빌드를 실패시켜 회귀를 명시화한다.
  */
@@ -206,8 +205,8 @@ function deferredWasmModuleWorker(): Plugin {
  * 네트워크 0 정책을 깨뜨리므로 `/ort/` prefix 로 mount 해 `node_modules/onnxruntime-web/dist/`
  * 를 같은 origin 으로 노출한다 (`configureNerEnv.ts` 가 wasmPaths 를 `/ort/` 로 덮어쓴다).
  *
- * dev 서버 전용. 본 빌드(`build:nlp`)에서는 onnxruntime-web 이 `viteSingleFile` 로 inline
- * 되어 단일 HTML 안에 들어가므로 런타임에 추가 fetch 가 발생하지 않는다.
+ * dev 서버 전용. 서버 배포 빌드에서는 런타임 자산을 같은 origin 에서 정적 파일로 제공해야 하며,
+ * 이 플러그인은 build 산출물에는 관여하지 않는다.
  */
 function ortRuntimeServer(): Plugin {
   const ortDir = path.resolve(__dirname, 'node_modules/onnxruntime-web/dist');
@@ -248,7 +247,7 @@ function ortRuntimeServer(): Plugin {
  * transformers.js 는 `pipeline(task, modelId, ...)` 호출 시 fetch 로 `${origin}/${localModelPath}/${modelId}/...`
  * 을 요청한다. PoC 단계에서는 사용자가 받아둔 폴더 (기본 `~/Downloads/privacy-filter`,
  * `POC_MODEL_DIR` 로 override) 를 `/models/privacy-filter/` 로 mount 해 표준 fetch 흐름으로
- * 동작시킨다. dev 서버에서만 활성. 빌드(`build:nlp`) 산출물에는 영향 없음.
+ * 동작시킨다. dev 서버에서만 활성. build 산출물에는 영향 없음.
  */
 function pocModelServer(): Plugin {
   const modelDir = process.env.POC_MODEL_DIR ?? path.join(os.homedir(), 'Downloads', 'privacy-filter');
@@ -284,30 +283,22 @@ function pocModelServer(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const isMulti = mode === 'multi';
   const isNlp = mode === 'nlp';
-  // NLP 모드는 별도 진입 HTML(`index-nlp.html`) 을 입력으로 받아 `dist-nlp/` 에 산출한다.
-  // 기존 단일 파일/플러그인 파이프라인은 그대로 적용해 file:// 더블클릭 동작 가정을 유지.
-  // rollup `input` 을 `{ index: ... }` 객체로 주면 산출 HTML 이 입력 basename 대신 키 이름
-  // (`index.html`) 으로 emit 되어 `dist-nlp/index.html` 통일 — postbuild 의 verify 스크립트가
-  // 모드에 무관하게 동일 경로를 검사할 수 있다.
-  const inputEntry: Record<string, string> = isNlp
-    ? { index: path.resolve(__dirname, 'index-nlp.html') }
-    : { index: path.resolve(__dirname, 'index.html') };
+  const useSingleFile = mode === 'singlefile';
+  const inputEntry: Record<string, string> = { index: path.resolve(__dirname, 'index.html') };
   return {
     plugins: [
       react(),
       stripMupdfWasmAsset(),
-      deferredWasmModuleWorker(),
       ...(isNlp
         ? [pocModelServer(), ortRuntimeServer(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
         : []),
-      ...(isMulti ? [] : [viteSingleFile()]),
+      ...(useSingleFile ? [deferredWasmModuleWorker(), viteSingleFile()] : []),
     ],
     resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
     // React DOM 19 는 Navigation API 가 있으면 synthetic navigation 을 시작한다.
-    // 단일 HTML 을 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
-    // 차단하므로, 이 앱에서는 전역 navigation 참조를 번들 시점에 제거한다.
+    // singlefile 모드를 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
+    // 차단하므로, 빌드 모드와 무관하게 전역 navigation 참조를 번들 시점에 제거한다.
     //
     // NLP 모드에서는 transformers.js 가 huggingface hub 로 모델을 fetch 하지 않도록
     // `globalThis.__NER_ALLOW_REMOTE__` 를 false 로 컴파일 타임 가드한다.
@@ -340,19 +331,19 @@ export default defineConfig(({ mode }) => {
           ? [stripMupdfWasmAsset(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
           : [stripMupdfWasmAsset()],
       rollupOptions: {
-        // mupdf 가 내부에서 dynamic import 를 사용하므로 단일 청크로 인라인한다
-        // (?worker&inline 또는 viteSingleFile 과 함께 동작).
+        // mupdf 가 내부에서 dynamic import 를 사용하므로 워커 번들을 단일 청크로 만든다.
+        // 기본 서버 배포에서는 별도 워커 자산으로 emit 되고, singlefile 모드에서는 inline 된다.
         output: { inlineDynamicImports: true },
       },
     },
     build: {
-      outDir: isNlp ? 'dist-nlp' : isMulti ? 'dist-multi' : 'dist',
+      outDir: 'dist',
       target: 'es2022',
-      cssCodeSplit: false,
-      assetsInlineLimit: isMulti ? 4096 : 100_000_000,
+      cssCodeSplit: true,
+      assetsInlineLimit: 4096,
       rollupOptions: {
         input: inputEntry,
-        output: { inlineDynamicImports: !isMulti },
+        output: { inlineDynamicImports: useSingleFile },
       },
     },
   };
