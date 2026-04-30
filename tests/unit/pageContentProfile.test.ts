@@ -39,4 +39,19 @@ describe('buildPageContentProfile', () => {
     expect(profile.imageAreaRatio).toBeCloseTo(0.02);
     expect(profile.imageBlocks[0]?.areaRatio).toBeCloseTo(0.02);
   });
+
+  it('marks a page with no extractable text as OCR target even when image blocks are not reported', () => {
+    const profile = buildPageContentProfile({
+      pageIndex: 0,
+      pageWidthPt: 842,
+      pageHeightPt: 595,
+      textCharCount: 0,
+      textLineCount: 0,
+      textBboxes: [],
+      imageBlocks: [],
+    });
+
+    expect(profile.hasLargeImage).toBe(false);
+    expect(profile.shouldAutoOcr).toBe(true);
+  });
 });

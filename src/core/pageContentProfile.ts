@@ -49,7 +49,7 @@ export function buildPageContentProfile(input: PageContentProfileInput): PageCon
       block.widthPx * block.heightPx >= LARGE_IMAGE_MIN_PIXELS,
   );
   const shouldAutoOcr =
-    (input.textCharCount === 0 && imageBlocks.length > 0) ||
+    input.textCharCount === 0 ||
     (input.textCharCount < LOW_TEXT_CHAR_COUNT && hasLargeImage) ||
     imageBlocks.some((block) => block.areaRatio >= LARGE_IMAGE_AREA_RATIO);
 
