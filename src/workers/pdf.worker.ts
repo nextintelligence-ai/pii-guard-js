@@ -6,8 +6,10 @@ import {
   ensureMupdfReady,
   extractLines,
   extractSpans,
+  inspectPageContent,
   openDocument,
   renderPage,
+  renderPagePng,
   setWasmBinary,
 } from '@/core/mupdfBridge';
 import { adaptToStructuredLines } from '@/core/spanMap';
@@ -25,6 +27,13 @@ const api: Partial<PdfWorkerApi> = {
   async renderPage(pageIndex, scale) {
     const result = await renderPage(pageIndex, scale);
     return transfer(result, [result.bitmap]);
+  },
+  async inspectPageContent(pageIndex) {
+    return inspectPageContent(pageIndex);
+  },
+  async renderPagePng(pageIndex, scale) {
+    const result = await renderPagePng(pageIndex, scale);
+    return transfer(result, [result.png.buffer]);
   },
   async extractSpans(pageIndex) {
     return extractSpans(pageIndex);

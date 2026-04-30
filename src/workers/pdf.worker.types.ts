@@ -5,6 +5,7 @@ import type {
   RedactionBox,
   TextSpan,
 } from '@/types/domain';
+import type { PageContentProfile } from '@/core/pageContentProfile';
 import type { StructuredLine } from '@/core/spanMap';
 
 export interface PdfWorkerApi {
@@ -19,6 +20,11 @@ export interface PdfWorkerApi {
     heightPx: number;
     scale: number;
   }>;
+  inspectPageContent(pageIndex: number): Promise<PageContentProfile>;
+  renderPagePng(
+    pageIndex: number,
+    scale: number,
+  ): Promise<{ png: Uint8Array; widthPx: number; heightPx: number; scale: number }>;
   extractSpans(pageIndex: number): Promise<TextSpan[]>;
   /**
    * NER 용 구조화 텍스트. line → span → char 트리.

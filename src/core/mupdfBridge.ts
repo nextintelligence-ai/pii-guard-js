@@ -11,6 +11,7 @@
 import type * as MupdfNS from 'mupdf';
 import { runDetectors } from '@/core/detectors';
 import type { LineForScan } from '@/core/detectors/types';
+import { buildPageContentProfile, type PageContentProfile } from '@/core/pageContentProfile';
 import {
   buildRedactAnnotations,
   applyAllRedactions,
@@ -210,6 +211,27 @@ export async function renderPage(
   }
 }
 
+export async function renderPagePng(
+  pageIndex: number,
+  scale: number,
+): Promise<{ png: Uint8Array; widthPx: number; heightPx: number; scale: number }> {
+  const mupdf = await ensureMupdfReady();
+  const doc = requireDoc();
+  const page = doc.loadPage(pageIndex);
+  let pixmap: MupdfNS.Pixmap | null = null;
+  try {
+    const matrix = mupdf.Matrix.scale(scale, scale);
+    pixmap = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false);
+    const widthPx = pixmap.getWidth();
+    const heightPx = pixmap.getHeight();
+    const png = new Uint8Array(pixmap.asPNG());
+    return { png, widthPx, heightPx, scale };
+  } finally {
+    pixmap?.destroy();
+    page.destroy();
+  }
+}
+
 /**
  * mupdf Pixmap.getPixels() 결과(RGB 패킹 또는 RGBA)를 RGBA Uint8ClampedArray 로 변환.
  * stride 와 컴포넌트 수를 고려해 line-by-line 으로 안전하게 복사한다.
@@ -278,6 +300,59 @@ export async function extractSpans(pageIndex: number): Promise<TextSpan[]> {
       },
     });
     return spans;
+  } finally {
+    stext?.destroy();
+    page.destroy();
+  }
+}
+
+export async function inspectPageContent(pageIndex: number): Promise<PageContentProfile> {
+  await ensureMupdfReady();
+  const doc = requireDoc();
+  const page = doc.loadPage(pageIndex);
+  let stext: MupdfNS.StructuredText | null = null;
+  try {
+    const bounds = page.getBounds();
+    const pageWidthPt = bounds[2] - bounds[0];
+    const pageHeightPt = bounds[3] - bounds[1];
+    let textCharCount = 0;
+    let textLineCount = 0;
+    const textBboxes: Bbox[] = [];
+    const imageBlocks: Array<{ bbox: Bbox; widthPx: number; heightPx: number }> = [];
+    let currentLineText = '';
+
+    stext = page.toStructuredText();
+    stext.walk({
+      beginLine: (bbox) => {
+        currentLineText = '';
+        textBboxes.push([bbox[0], bbox[1], bbox[2], bbox[3]]);
+      },
+      onChar: (c) => {
+        currentLineText += c;
+        textCharCount += c.length;
+      },
+      endLine: () => {
+        if (currentLineText.length > 0) textLineCount += 1;
+        currentLineText = '';
+      },
+      onImageBlock: (bbox, _transform, image) => {
+        imageBlocks.push({
+          bbox: [bbox[0], bbox[1], bbox[2], bbox[3]],
+          widthPx: image.getWidth(),
+          heightPx: image.getHeight(),
+        });
+      },
+    });
+
+    return buildPageContentProfile({
+      pageIndex,
+      pageWidthPt,
+      pageHeightPt,
+      textCharCount,
+      textLineCount,
+      textBboxes,
+      imageBlocks,
+    });
   } finally {
     stext?.destroy();
     page.destroy();
