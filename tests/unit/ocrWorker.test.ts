@@ -244,4 +244,82 @@ describe('ocr.worker', () => {
       }),
     );
   });
+
+  it('tries a rotated image and maps OCR polygons back when the original image has no text', async () => {
+    paddle.predict
+      .mockResolvedValueOnce([{ items: [] }])
+      .mockResolvedValueOnce([
+        {
+          items: [
+            {
+              text: '010-1234-5678',
+              score: 0.91,
+              poly: [
+                [10, 20],
+                [30, 20],
+                [30, 40],
+                [10, 40],
+              ],
+            },
+          ],
+          runtime: { requestedBackend: 'auto' },
+        },
+      ]);
+
+    const bitmap = { width: 100, height: 60, close: vi.fn() };
+    const context = {
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    class MockOffscreenCanvas {
+      constructor(
+        public width: number,
+        public height: number,
+      ) {}
+
+      getContext(type: string) {
+        return type === '2d' ? context : null;
+      }
+
+      async convertToBlob() {
+        return new Blob([new Uint8Array([9, 8, 7])], { type: 'image/png' });
+      }
+    }
+
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap));
+    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
+
+    try {
+      await import('@/workers/ocr.worker');
+
+      await expect(
+        exposedApi().recognizePng({
+          pageIndex: 0,
+          png: new Uint8Array([1, 2, 3]),
+        }),
+      ).resolves.toMatchObject({
+        lines: [
+          {
+            text: '010-1234-5678',
+            poly: [
+              { x: 20, y: 50 },
+              { x: 20, y: 30 },
+              { x: 40, y: 30 },
+              { x: 40, y: 50 },
+            ],
+          },
+        ],
+        runtime: expect.objectContaining({
+          rotationApplied: 90,
+        }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(paddle.predict).toHaveBeenCalledTimes(2);
+    expect(context.rotate).toHaveBeenCalledWith(Math.PI / 2);
+    expect(bitmap.close).toHaveBeenCalled();
+  });
 });
