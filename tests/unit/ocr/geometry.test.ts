@@ -26,6 +26,32 @@ describe('OCR geometry', () => {
     ]);
   });
 
+  it('uses approximate visual character widths for OCR line subdivision', () => {
+    const line = {
+      id: 'line-1',
+      pageIndex: 0,
+      text: '고객 010-1234-5678 확인',
+      score: 0.8,
+      poly: [
+        { x: 0, y: 10 },
+        { x: 240, y: 10 },
+        { x: 240, y: 30 },
+        { x: 0, y: 30 },
+      ],
+    };
+
+    const phoneBoxes = lineToDetectorLine(line).charBboxes.slice(3, 16);
+    const phoneBbox = [
+      Math.min(...phoneBoxes.map((bbox) => bbox[0])),
+      Math.min(...phoneBoxes.map((bbox) => bbox[1])),
+      Math.max(...phoneBoxes.map((bbox) => bbox[2])),
+      Math.max(...phoneBoxes.map((bbox) => bbox[3])),
+    ];
+
+    expect(phoneBbox[0]).toBeGreaterThan(40);
+    expect(phoneBbox[2]).toBeLessThan(200);
+  });
+
   it('converts OCR pixel bbox to PDF point bbox using render scale', () => {
     expect(ocrPixelBboxToPdfBbox([20, 40, 100, 80], 2)).toEqual([10, 20, 50, 40]);
   });

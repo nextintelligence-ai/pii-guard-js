@@ -3,8 +3,10 @@ import type { Candidate } from '@/types/domain';
 import { lineToDetectorLine, ocrPixelBboxToPdfBbox } from './geometry';
 import type { OcrDetectionInput } from './types';
 
+const OCR_CANDIDATE_PADDING_PX = 1;
+
 export function detectOcrCandidates(input: OcrDetectionInput): Candidate[] {
-  const detectorLines = input.lines.map((line) => lineToDetectorLine(line, 4));
+  const detectorLines = input.lines.map((line) => lineToDetectorLine(line, OCR_CANDIDATE_PADDING_PX));
   return preferSpecificOverlappingCandidates(runDetectors(detectorLines, undefined, 'ocr')).map((candidate) => ({
     ...candidate,
     bbox: ocrPixelBboxToPdfBbox(candidate.bbox, input.renderScale),
