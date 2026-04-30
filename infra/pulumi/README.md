@@ -1,6 +1,6 @@
 # pii-guard-js AWS Infrastructure
 
-Pulumi TypeScript stack for deploying `pii-guard-js` (single-HTML static site) to AWS S3 + CloudFront.
+Pulumi TypeScript stack for deploying `pii-guard-js` as a multi-asset static site to AWS S3 + CloudFront.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ pulumi stack select pii-guard-prod
 pulumi up
 ```
 
-On redeploy, `pulumi up` detects the changed `index.html` etag and uploads automatically.
+On redeploy, `pulumi up` scans `dist/**` and uploads every emitted asset. `index.html` uses a short cache policy; hashed JS/CSS/WASM/model assets use a long immutable cache policy.
 
 CloudFront cache is invalidated automatically by GitHub Actions on every push to `main`.
 
@@ -39,16 +39,17 @@ CloudFront cache is invalidated automatically by GitHub Actions on every push to
 
 The workflow at `.github/workflows/deploy.yml` runs on every push to `main`:
 
-1. `npm run build` — produces `dist/index.html`
-2. `aws s3 cp` — uploads to S3
-3. `aws cloudfront create-invalidation` — invalidates CloudFront cache and waits for completion
+1. `npm run build` — produces the server static `dist/` directory
+2. `aws s3 cp` — uploads `dist/index.html` with short cache-control
+3. `aws s3 sync` — uploads every other `dist/**` asset with long immutable cache-control
+4. `aws cloudfront create-invalidation` — invalidates CloudFront cache and waits for completion
 
 Authentication uses OIDC — no long-lived AWS credentials stored in GitHub.
 
 | Resource | Value |
 |----------|-------|
 | IAM Role (OIDC) | `arn:aws:iam::677276107201:role/pii-guard-github-actions-deploy` |
-| Permissions | `s3:PutObject` on bucket + `cloudfront:CreateInvalidation` on distribution |
+| Permissions | `s3:PutObject`, `s3:DeleteObject`, and `s3:ListBucket` for asset sync + `cloudfront:CreateInvalidation` on distribution |
 
 ## Troubleshooting
 
