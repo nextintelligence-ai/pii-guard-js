@@ -64,7 +64,7 @@ const NER_CATEGORIES: DetectionCategory[] = [
 
 type DetectedBox = RedactionBox & {
   category: DetectionCategory;
-  source: 'auto' | 'ner';
+  source: 'auto' | 'ner' | 'ocr';
 };
 type ManualBox = RedactionBox & { source: 'manual-rect' | 'text-select' };
 
@@ -73,7 +73,8 @@ export function CandidatePanel() {
     useShallow((s) =>
       Object.values(s.boxes).filter(
         (b): b is DetectedBox =>
-          (b.source === 'auto' || b.source === 'ner') && b.category !== undefined,
+          (b.source === 'auto' || b.source === 'ner' || b.source === 'ocr') &&
+          b.category !== undefined,
       ),
     ),
   );
@@ -112,8 +113,12 @@ export function CandidatePanel() {
       }),
     [candidateById, detectedBoxes, nerThreshold],
   );
+  const ocrBoxes = useMemo(
+    () => detectedBoxes.filter((b) => b.source === 'ocr'),
+    [detectedBoxes],
+  );
 
-  const totalAuto = regexBoxes.length + (showNerUi ? nerBoxes.length : 0);
+  const totalAuto = regexBoxes.length + ocrBoxes.length + (showNerUi ? nerBoxes.length : 0);
 
   return (
     <div className="space-y-4">
@@ -133,6 +138,27 @@ export function CandidatePanel() {
               key={cat}
               cat={cat}
               source="regex"
+              items={items}
+              enabled={cats[cat]}
+              selectedBoxId={selectedBoxId}
+              candidateById={candidateById}
+              onToggleCategory={() => toggleCat(cat)}
+              onToggleBox={toggle}
+              onGoTo={goToPage}
+              onFocusBox={(id, page) => {
+                goToPage(page);
+                focusBox(id);
+              }}
+            />
+          );
+        })}
+        {REGEX_CATEGORIES.map((cat) => {
+          const items = ocrBoxes.filter((b) => b.category === cat);
+          return (
+            <CategoryGroup
+              key={`ocr-${cat}`}
+              cat={cat}
+              source="ocr"
               items={items}
               enabled={cats[cat]}
               selectedBoxId={selectedBoxId}
@@ -224,7 +250,7 @@ export function CandidatePanel() {
 
 type GroupProps = {
   cat: DetectionCategory;
-  source: 'regex' | 'ner';
+  source: 'regex' | 'ner' | 'ocr';
   items: DetectedBox[];
   enabled: boolean;
   selectedBoxId: string | null;
@@ -259,7 +285,7 @@ function CategoryGroup({
     return [...map.entries()].sort(([a], [b]) => a - b);
   }, [items]);
 
-  const id = `cat-${cat}`;
+  const id = `cat-${source}-${cat}`;
 
   return (
     <div className="rounded-md border bg-card">
@@ -329,11 +355,12 @@ function CategoryGroup({
                           <span className="text-xs font-normal text-muted-foreground">
                             박스 #{b.id.slice(-6)}
                           </span>
-                          {b.source === 'ner' && typeof confidence === 'number' && (
-                            <span className="ml-auto text-[11px] text-muted-foreground">
-                              {confidence.toFixed(2)}
-                            </span>
-                          )}
+                          {(b.source === 'ner' || b.source === 'ocr') &&
+                            typeof confidence === 'number' && (
+                              <span className="ml-auto text-[11px] text-muted-foreground">
+                                {confidence.toFixed(2)}
+                              </span>
+                            )}
                         </button>
                       </li>
                     );
@@ -348,8 +375,9 @@ function CategoryGroup({
   );
 }
 
-function SourceBadge({ source }: { source: 'regex' | 'ner' }) {
+function SourceBadge({ source }: { source: 'regex' | 'ner' | 'ocr' }) {
   if (source === 'regex') return <Badge variant="secondary">정규식</Badge>;
+  if (source === 'ocr') return <Badge variant="outline">OCR</Badge>;
   return <Badge variant="warning">NER · 검수 필요</Badge>;
 }
 

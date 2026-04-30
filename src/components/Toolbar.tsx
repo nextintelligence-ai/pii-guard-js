@@ -1,5 +1,13 @@
 import { lazy, Suspense, useRef } from 'react';
-import { FolderOpen, Undo2, Redo2, HelpCircle, Shield } from 'lucide-react';
+import {
+  Files,
+  FolderOpen,
+  HelpCircle,
+  Redo2,
+  ScanText,
+  Shield,
+  Undo2,
+} from 'lucide-react';
 import { useAppStore } from '@/state/store';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -27,6 +35,9 @@ type Props = {
 
 export function Toolbar({ onLoad, onApply, onHelp }: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
+  const currentPage = useAppStore((s) => s.currentPage);
+  const requestOcrPage = useAppStore((s) => s.requestOcrPage);
+  const requestOcrAll = useAppStore((s) => s.requestOcrAll);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
@@ -87,6 +98,38 @@ export function Toolbar({ onLoad, onApply, onHelp }: Props) {
             </Button>
           </TooltipTrigger>
           <TooltipContent>사용법 안내</TooltipContent>
+        </Tooltip>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => requestOcrPage(currentPage)}
+              disabled={docKind !== 'ready'}
+              aria-label="현재 페이지 OCR"
+            >
+              <ScanText />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>현재 페이지 OCR</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() => requestOcrAll()}
+              disabled={docKind !== 'ready'}
+              aria-label="전체 문서 OCR"
+            >
+              <Files />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>전체 문서 OCR</TooltipContent>
         </Tooltip>
 
         {NerLoadButton && (

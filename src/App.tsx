@@ -7,6 +7,7 @@ import { CandidatePanel } from "@/components/CandidatePanel";
 import { PageNavigator } from "@/components/PageNavigator";
 import { ApplyResultDialog } from "@/components/ApplyResultDialog";
 import { UsageGuideModal } from "@/components/UsageGuideModal";
+import { OcrStatus } from "@/components/OcrStatus";
 import { ScanSearch, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Toaster } from "@/components/ui/sonner";
 import { usePdfDocument } from "@/hooks/usePdfDocument";
 import { useAutoDetect } from "@/hooks/useAutoDetect";
+import { useOcrDetect } from "@/hooks/useOcrDetect";
 import { useApply } from "@/hooks/useApply";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import {
@@ -30,6 +32,7 @@ const NerRuntime =
 export default function App() {
   useKeyboard();
   useAutoDetect();
+  useOcrDetect();
   const { load } = usePdfDocument();
   const { apply } = useApply();
   const doc = useAppStore((s) => s.doc);
@@ -83,6 +86,7 @@ export default function App() {
                     <NerRuntime />
                   </Suspense>
                 )}
+                <OcrStatus />
                 <CandidatePanel />
               </div>
             </ScrollArea>

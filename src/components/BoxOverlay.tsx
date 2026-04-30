@@ -3,11 +3,12 @@ import { useAppStore } from '@/state/store';
 import { useBoxesForPage } from '@/state/selectors';
 import { useSpansForPage } from '@/hooks/useSpansForPage';
 import { pdfRectToCanvasPx, canvasPxToPdfRect, bboxesIntersect } from '@/utils/coords';
-import type { Bbox, RedactionBox } from '@/types/domain';
+import type { Bbox, DetectionCategory, RedactionBox } from '@/types/domain';
 
 type Props = { widthPx: number; heightPx: number; scale: number };
+type OverlayCategory = DetectionCategory | 'manual';
 
-const COLORS: Record<string, string> = {
+const COLORS: Record<OverlayCategory, string> = {
   rrn: 'rgba(220,38,38,0.35)',
   phone: 'rgba(234,88,12,0.35)',
   email: 'rgba(37,99,235,0.35)',
@@ -15,9 +16,14 @@ const COLORS: Record<string, string> = {
   businessNo: 'rgba(168,85,247,0.35)',
   card: 'rgba(202,138,4,0.35)',
   address: 'rgba(236,72,153,0.35)',
+  private_person: 'transparent',
+  private_address: 'transparent',
+  private_url: 'transparent',
+  private_date: 'transparent',
+  secret: 'transparent',
   manual: 'rgba(15,23,42,0.45)',
 };
-const STROKE: Record<string, string> = {
+const STROKE: Record<OverlayCategory, string> = {
   rrn: '#dc2626',
   phone: '#ea580c',
   email: '#2563eb',
@@ -25,6 +31,11 @@ const STROKE: Record<string, string> = {
   businessNo: '#a855f7',
   card: '#ca8a04',
   address: '#ec4899',
+  private_person: '#f43f5e',
+  private_address: '#d946ef',
+  private_url: '#06b6d4',
+  private_date: '#f59e0b',
+  secret: '#3f3f46',
   manual: '#0f172a',
 };
 
@@ -306,8 +317,10 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
           meta.rotation,
         );
         const r = pendingFor(b.id) ?? baseRect;
-        const key =
-          (b.source === 'auto' || b.source === 'ner') && b.category ? b.category : 'manual';
+        const key: OverlayCategory =
+          (b.source === 'auto' || b.source === 'ner' || b.source === 'ocr') && b.category
+            ? b.category
+            : 'manual';
         const fill = b.enabled ? COLORS[key] : 'transparent';
         const stroke = STROKE[key];
         const isSelected = selectedBoxId === b.id;
