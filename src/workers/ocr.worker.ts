@@ -17,6 +17,14 @@ const MIN_CONFIDENT_TEXT_SCORE = 0.75;
 const VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE = 0.5;
 const VERTICAL_LINE_ASPECT_RATIO = 1.5;
 const VERTICAL_SELECTION_PENALTY = 0.35;
+const MIN_NOISE_CHECK_ITEM_COUNT = 8;
+const MIN_NOISE_CHECK_TEXT_CHARS = 32;
+const SHORT_LINE_MAX_CHARS = 2;
+const SHORT_LINE_RATIO_FOR_ROTATION_PROBE = 0.45;
+const SYMBOL_RATIO_FOR_ROTATION_PROBE = 0.28;
+const WORDLIKE_RATIO_FOR_ROTATION_PROBE = 0.55;
+const TEXT_QUALITY_SCORE_FOR_ROTATION_PROBE = 0.7;
+const TEXT_QUALITY_MIN_SCORE = 0.2;
 
 type OcrRotation = 0 | (typeof ROTATION_FALLBACKS)[number];
 
@@ -35,10 +43,15 @@ type RotatedBlob = {
 type OcrResultSummary = {
   rotation: OcrRotation;
   itemCount: number;
+  nonEmptyLineCount: number;
   textChars: number;
   textScore: number;
   meanConfidence: number;
   verticalTextRatio: number;
+  shortLineRatio: number;
+  symbolRatio: number;
+  wordlikeRatio: number;
+  textQualityScore: number;
   selectionScore: number;
 };
 
@@ -52,6 +65,7 @@ type RotationDiagnostics = {
   pageIndex: number;
   selectedRotation: OcrRotation;
   reason: string;
+  probeReasons: string[];
   candidates: OcrResultSummary[];
 };
 
@@ -90,7 +104,8 @@ async function recognizeBlob(pageIndex: number, blob: Blob, backend: OcrBackend)
   const [result] = await engine.predict(blob);
   const original = buildRotationCandidate(0, result);
   const candidates: RotationCandidate[] = [original];
-  const shouldProbe = shouldProbeRotations(original.summary);
+  const probeReasons = getRotationProbeReasons(original.summary);
+  const shouldProbe = probeReasons.length > 0;
 
   if (shouldProbe) {
     for (const rotation of ROTATION_FALLBACKS) {
@@ -108,7 +123,7 @@ async function recognizeBlob(pageIndex: number, blob: Blob, backend: OcrBackend)
   }
 
   const selected = selectBestRotationCandidate(candidates);
-  const diagnostics = buildRotationDiagnostics(pageIndex, selected, candidates, shouldProbe);
+  const diagnostics = buildRotationDiagnostics(pageIndex, selected, candidates, probeReasons);
   logRotationDiagnostics(diagnostics);
 
   return selected.result
@@ -271,37 +286,87 @@ function summarizeOcrResult(result: OcrResult | undefined, rotation: OcrRotation
   let textScore = 0;
   let confidenceSum = 0;
   let verticalTextChars = 0;
+  let nonEmptyLineCount = 0;
+  let shortLineCount = 0;
+  let symbolChars = 0;
+  let wordlikeChars = 0;
+  let classifiedChars = 0;
 
   for (const item of items) {
-    const chars = item.text.trim().length;
-    if (chars === 0) continue;
+    const text = item.text.trim();
+    const chars = Array.from(text);
+    const charCount = chars.length;
+    if (charCount === 0) continue;
     const confidence = typeof item.score === 'number' ? item.score : 0.5;
-    textChars += chars;
-    textScore += chars * confidence;
-    confidenceSum += chars * confidence;
-    if (isVerticalTextLine(item.poly)) verticalTextChars += chars;
+    nonEmptyLineCount += 1;
+    if (charCount <= SHORT_LINE_MAX_CHARS) shortLineCount += 1;
+
+    for (const char of chars) {
+      if (/\s/.test(char)) continue;
+      classifiedChars += 1;
+      if (isWordlikeOcrChar(char)) {
+        wordlikeChars += 1;
+      } else {
+        symbolChars += 1;
+      }
+    }
+
+    textChars += charCount;
+    textScore += charCount * confidence;
+    confidenceSum += charCount * confidence;
+    if (isVerticalTextLine(item.poly)) verticalTextChars += charCount;
   }
 
   const meanConfidence = textChars === 0 ? 0 : confidenceSum / textChars;
   const verticalTextRatio = textChars === 0 ? 0 : verticalTextChars / textChars;
-  const selectionScore = textScore * (1 - verticalTextRatio * VERTICAL_SELECTION_PENALTY);
+  const shortLineRatio = nonEmptyLineCount === 0 ? 0 : shortLineCount / nonEmptyLineCount;
+  const symbolRatio = classifiedChars === 0 ? 0 : symbolChars / classifiedChars;
+  const wordlikeRatio = classifiedChars === 0 ? 0 : wordlikeChars / classifiedChars;
+  const textQualityScore =
+    textChars === 0 ? 1 : scoreOcrTextQuality(shortLineRatio, symbolRatio, wordlikeRatio);
+  const selectionScore =
+    textScore * (1 - verticalTextRatio * VERTICAL_SELECTION_PENALTY) * textQualityScore;
 
   return {
     rotation,
     itemCount: items.length,
+    nonEmptyLineCount,
     textChars,
     textScore: roundDiagnosticNumber(textScore),
     meanConfidence: roundDiagnosticNumber(meanConfidence),
     verticalTextRatio: roundDiagnosticNumber(verticalTextRatio),
+    shortLineRatio: roundDiagnosticNumber(shortLineRatio),
+    symbolRatio: roundDiagnosticNumber(symbolRatio),
+    wordlikeRatio: roundDiagnosticNumber(wordlikeRatio),
+    textQualityScore: roundDiagnosticNumber(textQualityScore),
     selectionScore: roundDiagnosticNumber(selectionScore),
   };
 }
 
-function shouldProbeRotations(summary: OcrResultSummary): boolean {
+function getRotationProbeReasons(summary: OcrResultSummary): string[] {
+  const reasons: string[] = [];
+  if (summary.textScore < MIN_ACCEPTABLE_OCR_SCORE) reasons.push('low-text-score');
+  if (summary.meanConfidence < MIN_CONFIDENT_TEXT_SCORE) reasons.push('low-confidence');
+  if (summary.verticalTextRatio >= VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE) {
+    reasons.push('vertical-text');
+  }
+  if (hasNoisyOcrText(summary)) reasons.push('noisy-text');
+  return reasons;
+}
+
+function hasNoisyOcrText(summary: OcrResultSummary): boolean {
+  if (
+    summary.nonEmptyLineCount < MIN_NOISE_CHECK_ITEM_COUNT ||
+    summary.textChars < MIN_NOISE_CHECK_TEXT_CHARS
+  ) {
+    return false;
+  }
+
   return (
-    summary.textScore < MIN_ACCEPTABLE_OCR_SCORE ||
-    summary.meanConfidence < MIN_CONFIDENT_TEXT_SCORE ||
-    summary.verticalTextRatio >= VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE
+    summary.shortLineRatio >= SHORT_LINE_RATIO_FOR_ROTATION_PROBE ||
+    summary.symbolRatio >= SYMBOL_RATIO_FOR_ROTATION_PROBE ||
+    summary.wordlikeRatio <= WORDLIKE_RATIO_FOR_ROTATION_PROBE ||
+    summary.textQualityScore <= TEXT_QUALITY_SCORE_FOR_ROTATION_PROBE
   );
 }
 
@@ -309,7 +374,8 @@ function isConfidentHorizontalResult(summary: OcrResultSummary): boolean {
   return (
     summary.textScore >= MIN_ACCEPTABLE_OCR_SCORE &&
     summary.meanConfidence >= MIN_CONFIDENT_TEXT_SCORE &&
-    summary.verticalTextRatio < VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE
+    summary.verticalTextRatio < VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE &&
+    !hasNoisyOcrText(summary)
   );
 }
 
@@ -323,12 +389,13 @@ function buildRotationDiagnostics(
   pageIndex: number,
   selected: RotationCandidate,
   candidates: RotationCandidate[],
-  probedRotations: boolean,
+  probeReasons: string[],
 ): RotationDiagnostics {
   return {
     pageIndex,
     selectedRotation: selected.rotation,
-    reason: rotationSelectionReason(selected, candidates, probedRotations),
+    reason: rotationSelectionReason(selected, candidates, probeReasons.length > 0),
+    probeReasons,
     candidates: candidates.map((candidate) => candidate.summary),
   };
 }
@@ -355,6 +422,25 @@ function isVerticalTextLine(poly: Array<[number, number]>): boolean {
   const width = Math.max(...xs) - Math.min(...xs);
   const height = Math.max(...ys) - Math.min(...ys);
   return height / Math.max(1, width) >= VERTICAL_LINE_ASPECT_RATIO;
+}
+
+function isWordlikeOcrChar(char: string): boolean {
+  return /[0-9A-Za-z가-힣]/.test(char);
+}
+
+function scoreOcrTextQuality(
+  shortLineRatio: number,
+  symbolRatio: number,
+  wordlikeRatio: number,
+): number {
+  const shortLinePenalty = Math.max(0, shortLineRatio - 0.25) * 1.25;
+  const symbolPenalty = Math.max(0, symbolRatio - 0.2) * 0.9;
+  const wordlikePenalty = Math.max(0, 0.58 - wordlikeRatio) * 0.8;
+  return clamp(1 - shortLinePenalty - symbolPenalty - wordlikePenalty, TEXT_QUALITY_MIN_SCORE, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function roundDiagnosticNumber(value: number): number {
