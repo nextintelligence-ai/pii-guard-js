@@ -1,5 +1,6 @@
 export const ORT_WASM_FILE_PATHS = {
-  wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm',
+  mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
+  wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
 } as const;
 
 export const PADDLE_OCR_ORT_WASM_PATH_PREFIX = import.meta.env.DEV

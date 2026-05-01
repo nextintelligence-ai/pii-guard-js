@@ -45,6 +45,7 @@ type Actions = {
   setCandidates(list: Candidate[]): void;
   addAutoBox(c: Candidate): void;
   addNerCandidates(pageIndex: number, boxes: NerBox[]): void;
+  addOcrNerCandidates(pageIndex: number, boxes: NerBox[]): void;
   addOcrCandidates(list: Candidate[], pageIndexes?: number[]): void;
   addManualBox(b: { pageIndex: number; bbox: Bbox; label?: string }): string;
   addTextSelectBox(b: { pageIndex: number; bbox: Bbox }): string;
@@ -97,6 +98,8 @@ const initial: State = {
 
 let ocrRequestSeq = 0;
 
+type NerSource = Extract<Candidate['source'], 'ner' | 'ocr-ner'>;
+
 export const useAppStore = create<State & Actions>((set, get) => ({
   ...initial,
   setDoc(d) {
@@ -130,45 +133,43 @@ export const useAppStore = create<State & Actions>((set, get) => ({
   },
   addNerCandidates(pageIndex, boxes) {
     if (boxes.length === 0) return;
-    const enabledMap = get().categoryEnabled;
-    const threshold = get().nerThreshold;
-    const newCandidates: Candidate[] = [];
-    const newBoxes: Record<string, RedactionBox> = {};
-    for (const b of boxes) {
-      const id = createId();
-      const category = b.category as DetectionCategory;
-      const bbox: Bbox = [
-        b.bbox.x,
-        b.bbox.y,
-        b.bbox.x + b.bbox.w,
-        b.bbox.y + b.bbox.h,
-      ];
-      newCandidates.push({
-        id,
-        pageIndex,
-        bbox,
-        text: '',
-        category,
-        confidence: b.score,
-        source: 'ner',
-      });
-      // categoryEnabled[category] 가 true 일 때만 박스를 enabled 로 추가.
-      // 신규 NER 카테고리는 기본 false 라 사용자가 켤 때까지 적용되지 않는다.
-      const isEnabled = (enabledMap[category] ?? false) && b.score >= threshold;
-      newBoxes[id] = {
-        id,
-        pageIndex,
-        bbox,
-        source: 'ner',
-        category,
-        enabled: isEnabled,
-      };
-    }
-    if (newCandidates.length === 0) return;
+    const { candidates: newCandidates, boxes: newBoxes } = buildNerRecords(
+      get(),
+      pageIndex,
+      boxes,
+      'ner',
+    );
     set((s) => ({
       candidates: [...s.candidates, ...newCandidates],
       boxes: { ...s.boxes, ...newBoxes },
     }));
+  },
+  addOcrNerCandidates(pageIndex, boxes) {
+    set((s) => {
+      const nextBoxes: Record<string, RedactionBox> = { ...s.boxes };
+      for (const id in nextBoxes) {
+        const box = nextBoxes[id]!;
+        if (box.source === 'ocr-ner' && box.pageIndex === pageIndex) {
+          delete nextBoxes[id];
+        }
+      }
+      const { candidates: newCandidates, boxes: newBoxes } = buildNerRecords(
+        s,
+        pageIndex,
+        boxes,
+        'ocr-ner',
+      );
+      return {
+        candidates: [
+          ...s.candidates.filter(
+            (candidate) =>
+              !(candidate.source === 'ocr-ner' && candidate.pageIndex === pageIndex),
+          ),
+          ...newCandidates,
+        ],
+        boxes: { ...nextBoxes, ...newBoxes },
+      };
+    });
   },
   addManualBox(b) {
     undoStack.push({ boxes: get().boxes, selectedBoxId: get().selectedBoxId });
@@ -252,7 +253,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
         const box = updated[id]!;
         if ((box.source === 'auto' || box.source === 'ocr') && box.category === cat) {
           updated[id] = { ...box, enabled: next };
-        } else if (box.source === 'ner' && box.category === cat) {
+        } else if (isNerSource(box.source) && box.category === cat) {
           updated[id] = {
             ...box,
             enabled: next && isNerBoxAboveThreshold(box, confidenceById, s.nerThreshold),
@@ -299,7 +300,7 @@ export const useAppStore = create<State & Actions>((set, get) => ({
       for (const id in s.boxes) {
         const box = s.boxes[id]!;
         boxes[id] =
-          box.source === 'ner' && !isNerBoxAboveThreshold(box, confidenceById, v)
+          isNerSource(box.source) && !isNerBoxAboveThreshold(box, confidenceById, v)
             ? { ...box, enabled: false }
             : box;
       }
@@ -371,10 +372,54 @@ function nextOcrRequestNonce(): number {
   return ocrRequestSeq;
 }
 
+function buildNerRecords(
+  s: State,
+  pageIndex: number,
+  boxes: NerBox[],
+  source: NerSource,
+): { candidates: Candidate[]; boxes: Record<string, RedactionBox> } {
+  const newCandidates: Candidate[] = [];
+  const newBoxes: Record<string, RedactionBox> = {};
+  for (const b of boxes) {
+    const id = createId();
+    const category = b.category as DetectionCategory;
+    const bbox: Bbox = [
+      b.bbox.x,
+      b.bbox.y,
+      b.bbox.x + b.bbox.w,
+      b.bbox.y + b.bbox.h,
+    ];
+    newCandidates.push({
+      id,
+      pageIndex,
+      bbox,
+      text: '',
+      category,
+      confidence: b.score,
+      source,
+    });
+    // NER 카테고리는 기본 OFF. 사용자가 카테고리를 켠 경우에도 신뢰도 기준을 통과해야 한다.
+    const enabled = (s.categoryEnabled[category] ?? false) && b.score >= s.nerThreshold;
+    newBoxes[id] = {
+      id,
+      pageIndex,
+      bbox,
+      source,
+      category,
+      enabled,
+    };
+  }
+  return { candidates: newCandidates, boxes: newBoxes };
+}
+
+function isNerSource(source: Candidate['source'] | RedactionBox['source']): source is NerSource {
+  return source === 'ner' || source === 'ocr-ner';
+}
+
 function buildNerConfidenceMap(candidates: Candidate[]): Map<string, number> {
   return new Map(
     candidates
-      .filter((candidate) => candidate.source === 'ner')
+      .filter((candidate) => isNerSource(candidate.source))
       .map((candidate) => [candidate.id, candidate.confidence]),
   );
 }
@@ -384,6 +429,6 @@ function isNerBoxAboveThreshold(
   confidenceById: Map<string, number>,
   threshold: number,
 ): boolean {
-  if (box.source !== 'ner') return true;
+  if (!isNerSource(box.source)) return true;
   return (confidenceById.get(box.id) ?? 0) >= threshold;
 }

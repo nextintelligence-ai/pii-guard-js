@@ -64,7 +64,7 @@ const NER_CATEGORIES: DetectionCategory[] = [
 
 type DetectedBox = RedactionBox & {
   category: DetectionCategory;
-  source: 'auto' | 'ner' | 'ocr';
+  source: 'auto' | 'ner' | 'ocr' | 'ocr-ner';
 };
 type ManualBox = RedactionBox & { source: 'manual-rect' | 'text-select' };
 
@@ -73,7 +73,10 @@ export function CandidatePanel() {
     useShallow((s) =>
       Object.values(s.boxes).filter(
         (b): b is DetectedBox =>
-          (b.source === 'auto' || b.source === 'ner' || b.source === 'ocr') &&
+          (b.source === 'auto' ||
+            b.source === 'ner' ||
+            b.source === 'ocr' ||
+            b.source === 'ocr-ner') &&
           b.category !== undefined,
       ),
     ),
@@ -95,7 +98,6 @@ export function CandidatePanel() {
   const focusBox = useAppStore((s) => s.focusBox);
   const deleteBox = useAppStore((s) => s.deleteBox);
   const selectedBoxId = useAppStore((s) => s.selectedBoxId);
-  const showNerUi = import.meta.env.MODE === 'nlp';
   const candidateById = useMemo(
     () => new Map(candidates.map((c) => [c.id, c])),
     [candidates],
@@ -107,7 +109,7 @@ export function CandidatePanel() {
   const nerBoxes = useMemo(
     () =>
       detectedBoxes.filter((b) => {
-        if (b.source !== 'ner') return false;
+        if (b.source !== 'ner' && b.source !== 'ocr-ner') return false;
         const confidence = candidateById.get(b.id)?.confidence ?? 0;
         return confidence >= nerThreshold;
       }),
@@ -118,7 +120,7 @@ export function CandidatePanel() {
     [detectedBoxes],
   );
 
-  const totalAuto = regexBoxes.length + ocrBoxes.length + (showNerUi ? nerBoxes.length : 0);
+  const totalAuto = regexBoxes.length + ocrBoxes.length + nerBoxes.length;
 
   return (
     <div className="space-y-4">
@@ -173,54 +175,52 @@ export function CandidatePanel() {
             />
           );
         })}
-        {showNerUi && (
-          <div className="space-y-2 pt-1">
-            <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-xs font-medium">NER 신뢰도</span>
-                <span className="text-xs text-muted-foreground">
-                  신뢰도 ≥ {nerThreshold.toFixed(2)}
-                </span>
-              </div>
-              <Slider
-                min={0.5}
-                max={0.95}
-                step={0.05}
-                value={[nerThreshold]}
-                onValueChange={([v]) => {
-                  if (typeof v === 'number') setNerThreshold(v);
-                }}
-                aria-label="NER 신뢰도 임계값"
-              />
+        <div className="space-y-2 pt-1">
+          <div className="rounded-md border bg-muted/30 px-3 py-2">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-medium">NER 신뢰도</span>
+              <span className="text-xs text-muted-foreground">
+                신뢰도 ≥ {nerThreshold.toFixed(2)}
+              </span>
             </div>
-            {nerBoxes.length === 0 && (
-              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                NER 모델을 로드하면 사람 이름·주소·URL·날짜·시크릿 자동 검출이 추가됩니다.
-              </div>
-            )}
-            {NER_CATEGORIES.map((cat) => {
-              const items = nerBoxes.filter((b) => b.category === cat);
-              return (
-                <CategoryGroup
-                  key={cat}
-                  cat={cat}
-                  source="ner"
-                  items={items}
-                  enabled={cats[cat]}
-                  selectedBoxId={selectedBoxId}
-                  candidateById={candidateById}
-                  onToggleCategory={() => toggleCat(cat)}
-                  onToggleBox={toggle}
-                  onGoTo={goToPage}
-                  onFocusBox={(id, page) => {
-                    goToPage(page);
-                    focusBox(id);
-                  }}
-                />
-              );
-            })}
+            <Slider
+              min={0.5}
+              max={0.95}
+              step={0.05}
+              value={[nerThreshold]}
+              onValueChange={([v]) => {
+                if (typeof v === 'number') setNerThreshold(v);
+              }}
+              aria-label="NER 신뢰도 임계값"
+            />
           </div>
-        )}
+          {nerBoxes.length === 0 && (
+            <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              NER 모델을 로드하면 사람 이름·주소·URL·날짜·시크릿 자동 검출이 추가됩니다.
+            </div>
+          )}
+          {NER_CATEGORIES.map((cat) => {
+            const items = nerBoxes.filter((b) => b.category === cat);
+            return (
+              <CategoryGroup
+                key={cat}
+                cat={cat}
+                source="ner"
+                items={items}
+                enabled={cats[cat]}
+                selectedBoxId={selectedBoxId}
+                candidateById={candidateById}
+                onToggleCategory={() => toggleCat(cat)}
+                onToggleBox={toggle}
+                onGoTo={goToPage}
+                onFocusBox={(id, page) => {
+                  goToPage(page);
+                  focusBox(id);
+                }}
+              />
+            );
+          })}
+        </div>
       </section>
 
       <section className="space-y-2">
@@ -355,7 +355,7 @@ function CategoryGroup({
                           <span className="text-xs font-normal text-muted-foreground">
                             박스 #{b.id.slice(-6)}
                           </span>
-                          {(b.source === 'ner' || b.source === 'ocr') &&
+                          {(b.source === 'ner' || b.source === 'ocr-ner' || b.source === 'ocr') &&
                             typeof confidence === 'number' && (
                               <span className="ml-auto text-[11px] text-muted-foreground">
                                 {confidence.toFixed(2)}

@@ -15,18 +15,25 @@ interface RawEntity {
   word: string;
 }
 
+type NerBackend = 'webgpu' | 'wasm';
+type NerDtype = 'q4' | 'fp16' | 'fp32';
+
+interface PipelineLoadResult {
+  pipe: unknown;
+  backend: NerBackend;
+  dtype: NerDtype;
+}
+
+interface PipelineLoadFailure {
+  backend: NerBackend;
+  dtype: NerDtype;
+  error: unknown;
+}
+
 let classifier: ((text: string, opts: { aggregation_strategy: 'simple' }) => Promise<RawEntity[]>) | null = null;
 let labelMap: Record<number, string> = {};
-let backend: 'webgpu' | 'wasm' = 'wasm';
+let backend: NerBackend = 'wasm';
 let activeModelDir: FileSystemDirectoryHandle | null = null;
-
-async function tryLoad(device: 'webgpu' | 'wasm') {
-  const pipe = await pipeline('token-classification', 'privacy-filter', {
-    device,
-    dtype: 'q4',
-  } as never);
-  return pipe;
-}
 
 const api: NerWorkerApi = {
   async load(modelHandle) {
@@ -38,21 +45,15 @@ const api: NerWorkerApi = {
       hasModelDirectory: activeModelDir !== null,
     });
 
-    let pipe;
-    try {
-      pipe = await tryLoad('webgpu');
-      backend = 'webgpu';
-    } catch (e) {
-      console.warn('[ner.worker] WebGPU 실패, WASM 폴백:', e);
-      pipe = await tryLoad('wasm');
-      backend = 'wasm';
-    }
+    const { pipe, backend: loadedBackend, dtype } = await loadBestPipeline();
+    backend = loadedBackend;
     classifier = pipe as never;
     const cfg = (pipe as unknown as { model: { config: { id2label?: Record<number, string> } } }).model
       .config;
     labelMap = cfg.id2label ?? {};
     console.info('[ner.worker] 모델 로드 완료', {
       backend,
+      dtype,
       labels: Object.keys(labelMap).length,
       ms: elapsedMs(startedAt),
     });
@@ -92,6 +93,105 @@ const api: NerWorkerApi = {
 };
 
 Comlink.expose(api);
+
+async function loadBestPipeline(): Promise<PipelineLoadResult> {
+  const failures: PipelineLoadFailure[] = [];
+  const hasQ4 = await hasModelFile('q4');
+  const hasFp32 = await hasModelFile('fp32');
+  const hasFp16 = await hasModelFile('fp16');
+
+  if (hasQ4) {
+    const loaded = await tryLoadPipeline('webgpu', 'q4', failures);
+    if (loaded) return loaded;
+  }
+
+  if (hasFp32) {
+    const loaded = await tryLoadPipeline('wasm', 'fp32', failures);
+    if (loaded) return loaded;
+  }
+
+  if (hasFp16) {
+    const loaded = await tryLoadPipeline('wasm', 'fp16', failures);
+    if (loaded) return loaded;
+  }
+
+  throw new Error(loadFailureMessage({ hasQ4, hasFp32, hasFp16, failures }));
+}
+
+async function tryLoadPipeline(
+  backendName: NerBackend,
+  dtype: NerDtype,
+  failures: PipelineLoadFailure[],
+): Promise<PipelineLoadResult | null> {
+  try {
+    const pipe = await pipeline('token-classification', 'privacy-filter', {
+      device: backendName,
+      dtype,
+    } as never);
+    return { pipe, backend: backendName, dtype };
+  } catch (error) {
+    failures.push({ backend: backendName, dtype, error });
+    console.warn('[ner.worker] NER backend 로드 실패', {
+      backend: backendName,
+      dtype,
+      error,
+    });
+    return null;
+  }
+}
+
+async function hasModelFile(dtype: NerDtype): Promise<boolean> {
+  if (!activeModelDir) return true;
+  try {
+    await readFileFromDir(activeModelDir, `onnx/${modelFileNameForDtype(dtype)}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function modelFileNameForDtype(dtype: NerDtype): string {
+  if (dtype === 'fp32') return 'model.onnx';
+  return `model_${dtype}.onnx`;
+}
+
+function loadFailureMessage({
+  hasQ4,
+  hasFp32,
+  hasFp16,
+  failures,
+}: {
+  hasQ4: boolean;
+  hasFp32: boolean;
+  hasFp16: boolean;
+  failures: PipelineLoadFailure[];
+}): string {
+  const details = failures
+    .map(({ backend: failedBackend, dtype, error }) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      return `${failedBackend}/${dtype}: ${reason}`;
+    })
+    .join(' | ');
+
+  if (hasQ4 && !hasFp32 && !hasFp16) {
+    return [
+      'q4 NER 모델은 GatherBlockQuantized op 때문에 WASM 에서 실행할 수 없습니다.',
+      'WebGPU q4 로드가 실패했고 WASM fallback 에 필요한 onnx/model.onnx 파일이 없습니다.',
+      'fp32 모델 파일(onnx/model.onnx)이 포함된 모델 폴더를 선택하거나 WebGPU 환경을 확인하세요.',
+      details ? `시도 결과: ${details}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return [
+    '지원되는 NER ONNX 모델을 로드하지 못했습니다.',
+    `확인된 파일: q4=${hasQ4}, fp32=${hasFp32}, fp16=${hasFp16}.`,
+    details ? `시도 결과: ${details}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
 
 const originalFetch = env.fetch;
 env.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

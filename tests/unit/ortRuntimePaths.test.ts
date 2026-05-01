@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { installOrtWarningFilter } from '@/workers/ortRuntimePaths';
+import { installOrtWarningFilter, ORT_WASM_FILE_PATHS } from '@/workers/ortRuntimePaths';
 
 describe('ORT runtime config', () => {
+  it('uses matching asyncify mjs and wasm assets for transformers WASM init', () => {
+    expect(ORT_WASM_FILE_PATHS).toEqual({
+      mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
+      wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
+    });
+  });
+
   it('suppresses known WebGPU EP assignment warnings only', () => {
     const originalWarn = vi.fn();
     const originalLog = vi.fn();

@@ -93,4 +93,46 @@ describe('정규식 자동탐지 플로우', () => {
       enabled: true,
     });
   });
+
+  it('정규식 자동탐지가 끝나도 기존 OCR 후보 메타데이터를 보존한다', async () => {
+    function Probe() {
+      useAutoDetect();
+      return null;
+    }
+
+    useAppStore.getState().addOcrCandidates([
+      {
+        id: 'ocr-phone-1',
+        pageIndex: 0,
+        bbox: [0, 0, 40, 10],
+        text: '010-1234-5678',
+        category: 'phone',
+        confidence: 0.88,
+        source: 'ocr',
+      },
+    ]);
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'sample.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().candidates.some((c) => c.source === 'auto'));
+
+    const state = useAppStore.getState();
+    expect(state.candidates.map((c) => c.id).sort()).toEqual([
+      'auto-email-1',
+      'ocr-phone-1',
+    ]);
+    expect(state.boxes['ocr-phone-1']).toMatchObject({
+      source: 'ocr',
+      category: 'phone',
+      enabled: true,
+    });
+  });
 });

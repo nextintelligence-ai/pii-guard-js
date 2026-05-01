@@ -5,13 +5,16 @@ import { useOcrDetect } from '@/hooks/useOcrDetect';
 import { useAppStore } from '@/state/store';
 import { getOcrWorker } from '@/workers/ocrWorkerClient';
 
-const { fakePdfWorker, fakeOcrWorker } = vi.hoisted(() => ({
+const { fakePdfWorker, fakeOcrWorker, fakeNerWorker } = vi.hoisted(() => ({
   fakePdfWorker: {
     inspectPageContent: vi.fn(),
     renderPagePng: vi.fn(),
   },
   fakeOcrWorker: {
     recognizePng: vi.fn(),
+  },
+  fakeNerWorker: {
+    classify: vi.fn(),
   },
 }));
 
@@ -21,6 +24,16 @@ vi.mock('@/workers/pdfWorkerClient', () => ({
 
 vi.mock('@/workers/ocrWorkerClient', () => ({
   getOcrWorker: vi.fn(() => fakeOcrWorker),
+}));
+
+vi.mock('@/hooks/useNerModel', () => ({
+  useNerModel: () => ({
+    state: 'ready',
+    meta: null,
+    worker: fakeNerWorker,
+    loadFromUserDir: vi.fn(),
+    reset: vi.fn(),
+  }),
 }));
 
 async function waitForStore(predicate: () => boolean): Promise<void> {
@@ -70,6 +83,7 @@ describe('OCR 탐지 플로우', () => {
         },
       ],
     });
+    fakeNerWorker.classify.mockResolvedValue([]);
   });
 
   afterEach(async () => {
@@ -134,6 +148,151 @@ describe('OCR 탐지 플로우', () => {
         textLines: ['주민번호 801129-1234567'],
         text: '주민번호 801129-1234567',
       }),
+    );
+  });
+
+  it('OCR 텍스트도 NER 로 분석해 비정형 PII 후보를 저장한다', async () => {
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-name',
+          pageIndex: 0,
+          text: '담당자 Alice Smith',
+          score: 0.96,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_person',
+        start: 4,
+        end: 15,
+        score: 0.98,
+        word: 'Alice Smith',
+      },
+    ]);
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() =>
+      useAppStore.getState().candidates.some((c) => c.source === 'ocr-ner'),
+    );
+
+    const state = useAppStore.getState();
+    const candidate = state.candidates.find((c) => c.source === 'ocr-ner');
+    expect(fakeNerWorker.classify).toHaveBeenCalledWith('담당자 Alice Smith');
+    expect(candidate).toMatchObject({
+      pageIndex: 0,
+      category: 'private_person',
+      confidence: 0.98,
+      source: 'ocr-ner',
+    });
+    expect(state.boxes[candidate!.id]).toMatchObject({
+      source: 'ocr-ner',
+      category: 'private_person',
+      enabled: false,
+    });
+    expect(state.boxes[candidate!.id]?.bbox[0]).toBeGreaterThan(0);
+  });
+
+  it('NER 준비 후 기존 OCR 후보만 있는 페이지도 OCR-NER 대상으로 다시 처리한다', async () => {
+    fakePdfWorker.inspectPageContent.mockResolvedValue({
+      pageIndex: 0,
+      pageAreaPt: 10000,
+      textCharCount: 500,
+      textLineCount: 20,
+      textAreaRatio: 0.8,
+      imageBlocks: [],
+      hasLargeImage: false,
+      shouldAutoOcr: false,
+    });
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-name',
+          pageIndex: 0,
+          text: '담당자 Alice Smith',
+          score: 0.96,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_person',
+        start: 4,
+        end: 15,
+        score: 0.98,
+        word: 'Alice Smith',
+      },
+    ]);
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'text.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+    useAppStore.getState().addOcrCandidates([
+      {
+        id: 'ocr-prev',
+        pageIndex: 0,
+        bbox: [0, 0, 10, 10],
+        text: '이전 OCR 결과',
+        category: 'rrn',
+        confidence: 0.9,
+        source: 'ocr',
+      },
+    ]);
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() =>
+      useAppStore.getState().candidates.some((c) => c.source === 'ocr-ner'),
+    );
+
+    expect(fakePdfWorker.renderPagePng).toHaveBeenCalledWith(0, 2);
+    expect(fakeNerWorker.classify).toHaveBeenCalledWith('담당자 Alice Smith');
+    expect(useAppStore.getState().candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'ocr-ner',
+          category: 'private_person',
+          confidence: 0.98,
+        }),
+      ]),
     );
   });
 

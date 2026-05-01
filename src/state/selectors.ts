@@ -14,7 +14,9 @@ export const useEnabledBoxes = (): RedactionBox[] =>
   useAppStore(useShallow((s) => Object.values(s.boxes).filter((b) => b.enabled)));
 
 export const useNerCandidates = (): Candidate[] =>
-  useAppStore(useShallow((s) => s.candidates.filter((c) => c.source === 'ner')));
+  useAppStore(
+    useShallow((s) => s.candidates.filter((c) => c.source === 'ner' || c.source === 'ocr-ner')),
+  );
 
 export const useNerProgress = (): NerProgress =>
   useAppStore(useShallow((s) => s.nerProgress));

@@ -1,9 +1,13 @@
 import { useEffect } from 'react';
 import { detectOcrCandidates } from '@/core/ocr/detect';
 import { removeDuplicateOcrCandidates } from '@/core/ocr/dedupe';
+import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
 import { useAppStore } from '@/state/store';
+import { useNerModel } from './useNerModel';
 import { getOcrWorker } from '@/workers/ocrWorkerClient';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
+import type { OcrLine } from '@/core/ocr/types';
+import type { NerBox } from '@/core/spanMap';
 
 const OCR_RENDER_SCALE = 2;
 
@@ -12,6 +16,9 @@ export function useOcrDetect(): void {
   const docEpoch = useAppStore((s) => s.docEpoch);
   const currentPage = useAppStore((s) => s.currentPage);
   const ocrRequest = useAppStore((s) => s.ocrRequest);
+  const ner = useNerModel();
+  const nerState = ner.state;
+  const nerWorker = ner.worker;
 
   useEffect(() => {
     if (doc.kind !== 'ready') return;
@@ -33,6 +40,7 @@ export function useOcrDetect(): void {
       cancelled ||
       useAppStore.getState().docEpoch !== docEpoch ||
       useAppStore.getState().doc.kind !== 'ready';
+    const canRunNer = nerState === 'ready' && nerWorker !== null;
 
     void (async () => {
       const pdf = await getPdfWorker();
@@ -45,9 +53,17 @@ export function useOcrDetect(): void {
         const alreadyHasOcr = useAppStore
           .getState()
           .candidates.some((candidate) => candidate.source === 'ocr' && candidate.pageIndex === page.index);
-        if (!force && alreadyHasOcr) continue;
+        const alreadyHasOcrNer = useAppStore
+          .getState()
+          .candidates.some(
+            (candidate) => candidate.source === 'ocr-ner' && candidate.pageIndex === page.index,
+          );
         if (force) {
           targets.push(page.index);
+          continue;
+        }
+        if (alreadyHasOcr) {
+          if (canRunNer && !alreadyHasOcrNer) targets.push(page.index);
           continue;
         }
         const profile = await pdf.inspectPageContent(page.index);
@@ -93,14 +109,30 @@ export function useOcrDetect(): void {
             renderScale: rendered.scale,
             lines: result.lines,
           });
+          const ocrNerBoxes =
+            canRunNer && nerWorker
+              ? await detectOcrNerBoxes(
+                  {
+                    renderScale: rendered.scale,
+                    lines: result.lines,
+                  },
+                  nerWorker,
+                  isStaleJob,
+                )
+              : [];
+          if (isStaleJob()) return;
           const state = useAppStore.getState();
-          const existingCandidates = state.candidates.filter((candidate) => candidate.source !== 'ocr');
+          const existingCandidates = state.candidates.filter(
+            (candidate) => candidate.source !== 'ocr' && candidate.source !== 'ocr-ner',
+          );
           const candidates = removeDuplicateOcrCandidates(ocrCandidates, existingCandidates);
           state.addOcrCandidates(candidates, [pageIndex]);
+          state.addOcrNerCandidates(pageIndex, ocrNerBoxes);
           logOcrSuccess({
             pageIndex,
             lines: result.lines.length,
             candidates: candidates.length,
+            nerCandidates: ocrNerBoxes.length,
             textLines: result.lines.map((line) => line.text),
             renderScale: rendered.scale,
             runtime: result.runtime,
@@ -142,7 +174,22 @@ export function useOcrDetect(): void {
     return () => {
       cancelled = true;
     };
-  }, [doc, docEpoch, currentPage, ocrRequest]);
+  }, [doc, docEpoch, currentPage, ocrRequest, nerState, nerWorker]);
+}
+
+async function detectOcrNerBoxes(
+  input: {
+    renderScale: number;
+    lines: OcrLine[];
+  },
+  nerWorker: NonNullable<ReturnType<typeof useNerModel>['worker']>,
+  isStaleJob: () => boolean,
+): Promise<NerBox[]> {
+  const { pageText } = ocrLinesToPageText(input);
+  if (pageText.trim().length === 0) return [];
+  const entities = await nerWorker.classify(pageText);
+  if (isStaleJob()) return [];
+  return ocrLinesToNerBoxes({ ...input, entities });
 }
 
 function getErrorMessage(error: unknown): string {
@@ -153,6 +200,7 @@ function logOcrSuccess(details: {
   pageIndex: number;
   lines: number;
   candidates: number;
+  nerCandidates?: number;
   textLines?: string[];
   renderScale?: number;
   runtime?: unknown;
@@ -166,6 +214,7 @@ function logOcrSuccess(details: {
     lines: details.lines,
     candidates: details.candidates,
   };
+  if (details.nerCandidates !== undefined) payload.nerCandidates = details.nerCandidates;
   if (details.renderScale !== undefined) payload.renderScale = details.renderScale;
   if (details.textLines !== undefined) {
     payload.textLines = details.textLines;

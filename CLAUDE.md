@@ -4,15 +4,15 @@
 
 ## 프로젝트 한 줄 요약
 
-브라우저 단독으로 한국어 PDF 의 PII 6종(주민/전화/이메일/계좌/사업자/카드)을 redaction 하는 **단일 HTML 도구**. NLP 빌드에서는 OpenAI privacy-filter NER 로 사람 이름/주소/URL/날짜/시크릿 후보를 추가한다. React 19 + Vite + MuPDF.js(WASM) + Web Worker.
+브라우저 단독으로 한국어 PDF 의 PII 6종(주민/전화/이메일/계좌/사업자/카드)을 redaction 하는 정적 사이트 도구. 기본 빌드에 OpenAI privacy-filter NER 런타임이 포함되어 사람 이름/주소/URL/날짜/시크릿 후보를 추가한다. React 19 + Vite + MuPDF.js(WASM) + Web Worker.
 
 ## 절대 깨지면 안 되는 제약
 
 이 4가지는 설계 전제입니다. 깨면 도구의 존재 이유가 사라집니다.
 
 1. **외부 네트워크 호출 금지.** PDF 도, 텔레메트리도, 폰트도, 어떤 fetch 도 외부로 나가서는 안 됩니다. `scripts/verify-no-external.mjs` 가 postbuild 에서 산출 HTML 안의 모든 URL 을 검사합니다. dev 안내용 console.error URL(`react.dev/errors/`, `radix-ui.com/primitives/`)만 allow list 에 있습니다.
-2. **단일 HTML, `file://` 더블클릭 동작.** 빌드는 `dist/index.html` 하나입니다. Service Worker / PWA / 별도 자산 파일 추가 금지. `vite-plugin-singlefile` 가 inline 하는 전제를 깨면 안 됩니다.
-3. **빌드 사이즈 예산.** 기본 빌드는 18MB, NLP 빌드는 70MB 입니다. `scripts/verify-build-size.mjs` 가 postbuild 에서 가드합니다. 큰 의존성(폰트/모델/별도 wasm) 추가 전엔 사이즈 영향을 먼저 추정하세요.
+2. **서버 배포형 정적 사이트.** 빌드는 `dist/` 아래 HTML, JS chunks, WASM, OCR/ONNX runtime 자산을 생성합니다. Service Worker / PWA 추가 금지.
+3. **단일 빌드 경로.** NER 를 위한 별도 `build:nlp`/`dev:nlp` 분기를 만들지 않습니다. 큰 의존성(폰트/모델/별도 wasm) 추가 전엔 사이즈 영향을 먼저 추정하세요.
 4. **PII 처리 결과 검증.** 적용 후 `useApply` 가 다시 텍스트를 추출해 누수 0건을 확인합니다(`postCheckLeaks === 0`). 이 검증을 우회하지 마세요.
 
 ## 사용자 환경 메모
@@ -25,13 +25,11 @@
 ```bash
 npm test           # vitest run (단위 + 통합)
 npm run lint       # tsc -b
-npm run build      # tsc -b && vite build → dist/index.html + postbuild 검증 2종
-npm run build:nlp  # tsc -b && vite build --mode nlp → dist-nlp/index-nlp.html + 70MB 검증
+npm run build      # tsc -b && vite build → dist/ + postbuild 외부 URL 검증
 npm run dev        # http://localhost:5173
-npm run dev:nlp    # NER 포함 개발 서버
 ```
 
-`prebuild`/`predev`/`pretest` 가 자동으로 `scripts/embed-wasm.mjs` 를 실행해 `src/wasm/mupdfBinary.ts`(gitignored) 를 만듭니다. 직접 만지지 마세요.
+`prebuild`/`predev`/`pretest` 가 자동으로 `scripts/embed-wasm.mjs` 와 `scripts/copy-ort-assets.mjs` 를 실행해 MuPDF/OCR/ONNX runtime 자산을 준비합니다. 생성 파일을 직접 만지지 마세요.
 
 작업 종료 전엔 **반드시** `npm test && npm run lint && npm run build` 3종이 통과하는지 확인합니다. shadcn 마이그레이션처럼 큰 변경에서는 Phase 마다 강제했던 게이트입니다.
 

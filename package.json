@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:nlp": "vite --mode nlp",
     "build": "tsc -b && vite build",
-    "build:nlp": "npm run build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

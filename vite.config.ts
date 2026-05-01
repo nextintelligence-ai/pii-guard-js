@@ -280,7 +280,7 @@ function deferredWasmModuleWorker(): Plugin {
 }
 
 /**
- * NLP 모드 dev 서버에서 onnxruntime-web 의 wasm / .mjs runtime 파일을 로컬 서빙한다.
+ * dev 서버에서 onnxruntime-web 의 wasm / .mjs runtime 파일을 로컬 서빙한다.
  *
  * transformers.js 4.2 의 onnxruntime-web 백엔드는 기본 `wasmPaths` 가 jsdelivr CDN 이라
  * dev 에서 `cdn.jsdelivr.net/npm/onnxruntime-web@.../dist/` 로 fetch 가 나간다. 외부
@@ -324,7 +324,7 @@ function ortRuntimeServer(): Plugin {
 }
 
 /**
- * NLP 모드 dev 서버에서 로컬 모델 디렉토리를 정적 서빙한다.
+ * dev 서버에서 로컬 모델 디렉토리를 정적 서빙한다.
  *
  * transformers.js 는 `pipeline(task, modelId, ...)` 호출 시 fetch 로 `${origin}/${localModelPath}/${modelId}/...`
  * 을 요청한다. PoC 단계에서는 사용자가 받아둔 폴더 (기본 `~/Downloads/privacy-filter`,
@@ -365,7 +365,6 @@ function pocModelServer(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const isNlp = mode === 'nlp';
   const useSingleFile = mode === 'singlefile';
   const inputEntry: Record<string, string> = { index: path.resolve(__dirname, 'index.html') };
   return {
@@ -373,9 +372,10 @@ export default defineConfig(({ mode }) => {
       react(),
       stripMupdfWasmAsset(),
       stripPaddleOcrExternalDefaults(),
-      ...(isNlp
-        ? [pocModelServer(), ortRuntimeServer(), stripOnnxJsdelivrDefault(), stripOnnxProxyWasmDataUrl()]
-        : []),
+      pocModelServer(),
+      ortRuntimeServer(),
+      stripOnnxJsdelivrDefault(),
+      stripOnnxProxyWasmDataUrl(),
       ...(useSingleFile ? [deferredWasmModuleWorker(), viteSingleFile()] : []),
     ],
     resolve: {
@@ -402,7 +402,7 @@ export default defineConfig(({ mode }) => {
     // singlefile 모드를 file:// 로 직접 열 때 Chrome 이 이 자기 자신 replace 탐색을
     // 차단하므로, 빌드 모드와 무관하게 전역 navigation 참조를 번들 시점에 제거한다.
     //
-    // NLP 모드에서는 transformers.js 가 huggingface hub 로 모델을 fetch 하지 않도록
+    // transformers.js 가 huggingface hub 로 모델을 fetch 하지 않도록
     // `globalThis.__NER_ALLOW_REMOTE__` 를 false 로 컴파일 타임 가드한다.
     define: {
       navigation: 'undefined',
@@ -428,19 +428,17 @@ export default defineConfig(({ mode }) => {
       // 워커 빌드 파이프라인에도 적용해야 한다. Vite 5 에서는 worker.plugins 가
       // 별도 함수로 분리되어 있어 main config 의 plugins 가 자동으로 상속되지 않는다.
       //
-      // NLP 모드의 NER 워커(`ner.worker.ts?worker&inline`) 는 @huggingface/transformers +
+      // NER 워커(`ner.worker.ts?worker&inline`) 는 @huggingface/transformers +
       // onnxruntime-web 을 포함한다. 메인 번들과 동일하게 jsdelivr 리터럴 / proxy worker
       // wasm dataURL 회귀를 워커 빌드 파이프라인에서도 차단해 워커 번들 내부의 onnx wasm
       // 이중 인라인을 방지한다.
       plugins: () =>
-        isNlp
-          ? [
-              stripMupdfWasmAsset(),
-              stripPaddleOcrExternalDefaults(),
-              stripOnnxJsdelivrDefault(),
-              stripOnnxProxyWasmDataUrl(),
-            ]
-          : [stripMupdfWasmAsset(), stripPaddleOcrExternalDefaults()],
+        [
+          stripMupdfWasmAsset(),
+          stripPaddleOcrExternalDefaults(),
+          stripOnnxJsdelivrDefault(),
+          stripOnnxProxyWasmDataUrl(),
+        ],
       rollupOptions: {
         // mupdf 가 내부에서 dynamic import 를 사용하므로 워커 번들을 단일 청크로 만든다.
         // 기본 서버 배포에서는 별도 워커 자산으로 emit 되고, singlefile 모드에서는 inline 된다.

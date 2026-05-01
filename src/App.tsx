@@ -24,10 +24,7 @@ import {
   markUsageGuideSeen,
 } from "@/utils/usageGuideStorage";
 
-const NerRuntime =
-  import.meta.env.MODE === "nlp"
-    ? lazy(() => import("@/components/NerRuntime"))
-    : null;
+const NerRuntime = lazy(() => import("@/components/NerRuntime"));
 
 export default function App() {
   useKeyboard();
@@ -81,11 +78,9 @@ export default function App() {
                     {doc.pages.length}페이지
                   </span>
                 </div>
-                {NerRuntime && (
-                  <Suspense fallback={null}>
-                    <NerRuntime />
-                  </Suspense>
-                )}
+                <Suspense fallback={null}>
+                  <NerRuntime />
+                </Suspense>
                 <OcrStatus />
                 <CandidatePanel />
               </div>

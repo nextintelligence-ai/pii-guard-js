@@ -20,7 +20,7 @@ export type DetectionCategory =
   | 'private_date'
   | 'secret';
 
-export type CandidateSource = 'auto' | 'ner' | 'ocr';
+export type CandidateSource = 'auto' | 'ner' | 'ocr' | 'ocr-ner';
 
 export type Candidate = {
   id: string;
@@ -32,7 +32,7 @@ export type Candidate = {
   source: CandidateSource;
 };
 
-export type RedactionBoxSource = 'auto' | 'ner' | 'ocr' | 'text-select' | 'manual-rect';
+export type RedactionBoxSource = 'auto' | 'ner' | 'ocr' | 'ocr-ner' | 'text-select' | 'manual-rect';
 
 export type RedactionBox = {
   id: string;

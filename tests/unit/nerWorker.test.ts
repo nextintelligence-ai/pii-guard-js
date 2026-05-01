@@ -10,6 +10,8 @@ const moduleOrder = vi.hoisted(() => ({
 }));
 
 const hf = vi.hoisted(() => {
+  type PipelineOptions = { device?: 'webgpu' | 'wasm'; dtype?: 'q4' | 'fp16' | 'fp32' };
+
   const fallbackFetch = async (
     _input: RequestInfo | URL,
     _init?: RequestInit,
@@ -31,26 +33,42 @@ const hf = vi.hoisted(() => {
     },
   });
 
+  const modelFileForDtype = (dtype: PipelineOptions['dtype']): string => {
+    if (dtype === 'fp32' || !dtype) return 'model.onnx';
+    return `model_${dtype}.onnx`;
+  };
+
+  const loadLocalPipeline = async (
+    _task: string,
+    _model: string,
+    opts?: PipelineOptions,
+  ) => {
+    const config = await env.fetch('/models/privacy-filter/config.json');
+    if (config.status !== 200) {
+      throw new Error(`config.json fetch failed: ${config.status}`);
+    }
+    const modelFile = modelFileForDtype(opts?.dtype);
+    const weights = await env.fetch(`/models/privacy-filter/onnx/${modelFile}`);
+    if (weights.status !== 200) {
+      throw new Error(`${modelFile} fetch failed: ${weights.status}`);
+    }
+    return classifier;
+  };
+
   return {
     env,
     classifier,
-    pipeline: vi.fn(async () => {
-      const config = await env.fetch('/models/privacy-filter/config.json');
-      if (config.status !== 200) {
-        throw new Error(`config.json fetch failed: ${config.status}`);
-      }
-      const weights = await env.fetch('/models/privacy-filter/onnx/model_q4.onnx');
-      if (weights.status !== 200) {
-        throw new Error(`model_q4.onnx fetch failed: ${weights.status}`);
-      }
-      return classifier;
-    }),
+    loadLocalPipeline,
+    pipeline: vi.fn(loadLocalPipeline),
   };
 });
 
 const ortRuntime = vi.hoisted(() => ({
   installWarnFilter: vi.fn(),
-  wasmFilePaths: { wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm' },
+  wasmFilePaths: {
+    mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
+    wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
+  },
 }));
 
 vi.mock('comlink', () => ({
@@ -120,20 +138,21 @@ class FakeDirectoryHandle {
   }
 }
 
-function modelDirectory(): FileSystemDirectoryHandle {
+function modelDirectory(onnxFiles = ['model_q4.onnx']): FileSystemDirectoryHandle {
   const encoder = new TextEncoder();
+  const onnxEntries = Object.fromEntries(
+    onnxFiles.map((fileName, index) => [
+      fileName,
+      new FakeFileHandle(fileName, new Uint8Array([index + 1, index + 2, index + 3])),
+    ]),
+  );
   return new FakeDirectoryHandle('privacy-filter', {
     'config.json': new FakeFileHandle(
       'config.json',
       encoder.encode(JSON.stringify({ model_type: 'bert' })),
       'application/json',
     ),
-    onnx: new FakeDirectoryHandle('onnx', {
-      'model_q4.onnx': new FakeFileHandle(
-        'model_q4.onnx',
-        new Uint8Array([1, 2, 3]),
-      ),
-    }),
+    onnx: new FakeDirectoryHandle('onnx', onnxEntries),
   }) as unknown as FileSystemDirectoryHandle;
 }
 
@@ -151,6 +170,7 @@ describe('ner.worker', () => {
     hf.env.allowLocalModels = false;
     hf.env.localModelPath = '';
     hf.env.backends.onnx.wasm = {};
+    hf.pipeline.mockImplementation(hf.loadLocalPipeline);
     ortRuntime.installWarnFilter.mockClear();
     moduleOrder.transformersSawFilterInstalled = false;
   });
@@ -161,17 +181,18 @@ describe('ner.worker', () => {
     expect(moduleOrder.transformersSawFilterInstalled).toBe(true);
   });
 
-  it('ONNX Runtime mjs 는 번들 모듈을 쓰고 wasm 파일만 /ort 에서 fetch 하도록 설정한다', async () => {
+  it('ONNX Runtime 은 같은 asyncify 계열 mjs/wasm 을 /ort 에서 fetch 하도록 설정한다', async () => {
     await import('@/workers/ner.worker');
 
     expect((hf.env.backends.onnx.wasm as { wasmPaths?: unknown }).wasmPaths).toEqual({
-      wasm: '/ort/ort-wasm-simd-threaded.jsep.wasm',
+      mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
+      wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
     });
     expect((hf.env.backends.onnx.wasm as { numThreads?: unknown }).numThreads).toBe(1);
     expect(ortRuntime.installWarnFilter).toHaveBeenCalled();
   });
 
-  it('선택한 모델 디렉토리 handle 로 transformers 로컬 fetch 를 해소한다', async () => {
+  it('q4 모델은 WebGPU backend 로 로드한다', async () => {
     await import('@/workers/ner.worker');
 
     const result = await exposedApi().load(modelDirectory());
@@ -185,6 +206,80 @@ describe('ner.worker', () => {
       'privacy-filter',
       { device: 'webgpu', dtype: 'q4' },
     );
+    expect(hf.pipeline).not.toHaveBeenCalledWith(
+      'token-classification',
+      'privacy-filter',
+      { device: 'wasm', dtype: 'q4' },
+    );
+  });
+
+  it('WebGPU q4 로드가 실패하면 fp32 모델을 WASM 으로 fallback 한다', async () => {
+    await import('@/workers/ner.worker');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    hf.pipeline.mockImplementation(async (task, model, opts) => {
+      if (opts?.device === 'webgpu' && opts.dtype === 'q4') {
+        throw new Error('WebGPU init failed');
+      }
+      return hf.loadLocalPipeline(task, model, opts);
+    });
+
+    try {
+      const result = await exposedApi().load(modelDirectory(['model_q4.onnx', 'model.onnx']));
+
+      expect(result).toEqual({
+        backend: 'wasm',
+        labelMap: { 0: 'O', 1: 'private_person' },
+      });
+      expect(hf.pipeline).toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'webgpu', dtype: 'q4' },
+      );
+      expect(hf.pipeline).toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'wasm', dtype: 'fp32' },
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[ner.worker] NER backend 로드 실패',
+        expect.objectContaining({ backend: 'webgpu', dtype: 'q4' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('q4 모델만 있고 WebGPU 로드가 실패하면 WASM 비호환 원인을 설명한다', async () => {
+    await import('@/workers/ner.worker');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    hf.pipeline.mockImplementation(async (_task, _model, opts) => {
+      if (opts?.device === 'webgpu' && opts.dtype === 'q4') {
+        throw new Error('WebGPU init failed');
+      }
+      return hf.loadLocalPipeline(_task, _model, opts);
+    });
+
+    try {
+      await expect(exposedApi().load(modelDirectory())).rejects.toThrow(
+        /q4.*GatherBlockQuantized.*WASM.*model\.onnx/s,
+      );
+      expect(hf.pipeline).toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'webgpu', dtype: 'q4' },
+      );
+      expect(hf.pipeline).not.toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'wasm', dtype: 'q4' },
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[ner.worker] NER backend 로드 실패',
+        expect.objectContaining({ backend: 'webgpu', dtype: 'q4' }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('transformers 출력에 char offset 이 없으면 word 로 start/end 를 보강한다', async () => {

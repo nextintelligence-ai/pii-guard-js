@@ -318,7 +318,8 @@ export function BoxOverlay({ widthPx, heightPx, scale }: Props) {
         );
         const r = pendingFor(b.id) ?? baseRect;
         const key: OverlayCategory =
-          (b.source === 'auto' || b.source === 'ner' || b.source === 'ocr') && b.category
+          (b.source === 'auto' || b.source === 'ner' || b.source === 'ocr' || b.source === 'ocr-ner') &&
+          b.category
             ? b.category
             : 'manual';
         const fill = b.enabled ? COLORS[key] : 'transparent';

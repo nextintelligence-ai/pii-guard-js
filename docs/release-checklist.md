@@ -7,7 +7,6 @@
 - [ ] `public/models/paddleocr/korean_PP-OCRv5_mobile_rec_onnx.tar` 존재
 - [ ] `npm run build` 성공 + `dist/index.html`, JS chunks, WASM, `/ort/`, `/models/paddleocr/` 자산 생성
 - [ ] `node scripts/verify-no-external.mjs` 통과 (외부 URL 0개) — postbuild로 자동 실행됨
-- [ ] `npm run build:nlp` 성공
 - [ ] 빌드 산출물 안에 외부 fetch 발생 URL(jsdelivr, paddle-model-ecology 등) 0개
 
 ## 수동 검증 (사용자/QA)
@@ -19,7 +18,7 @@
 - [ ] 암호화 PDF — 비밀번호 프롬프트 동작
 - [ ] 큰 파일(>200MB) 업로드 시 경고 모달 표시
 - [ ] DevTools 콘솔에 경고/에러 없는지
-- [ ] NLP 모드에서 `NER 모델 로드` → 받아둔 모델로 영문/한국어 추론 성공
+- [ ] `NER 모델 로드` → 받아둔 모델로 영문/한국어 추론 성공
 
 ## 결과 PDF 메타데이터 확인
 - [ ] Author, Producer, Title, Creator 등이 비어있는지

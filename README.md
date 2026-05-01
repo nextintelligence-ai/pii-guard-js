@@ -4,7 +4,7 @@
 
 - 주민등록번호 · 전화 · 이메일 · 계좌번호 · 사업자번호 · 카드번호 6종을 정규식으로 자동 탐지
 - PaddleOCR 기반 OCR 로 스캔본/이미지 기반 PDF 페이지의 텍스트 후보를 브라우저 안에서 추가 탐지
-- NLP 빌드에서 OpenAI privacy-filter NER 모델을 사용해 사람 이름 · 주소 · URL · 날짜 · 시크릿 후보를 추가 탐지
+- OpenAI privacy-filter NER 모델을 사용해 사람 이름 · 주소 · URL · 날짜 · 시크릿 후보를 추가 탐지
 - 자동 탐지 결과를 사용자 검수(체크 해제/수동 박스 추가)로 보강
 - MuPDF redaction 으로 텍스트 레이어까지 실제로 제거 후 메타데이터 정리
 - 적용 결과를 한 번 더 텍스트 추출로 검증(누수 0건 확인)하여 다운로드
@@ -14,14 +14,14 @@
 - **PDF 는 외부로 나가지 않습니다.** 모든 처리는 클라이언트 사이드(브라우저) 에서 끝납니다.
 - **서버 배포형 정적 사이트.** `npm run build` 는 `dist/` 아래에 HTML, JS chunks, WASM, OCR/ONNX runtime 자산을 생성합니다.
 - **정적 서버는 앱과 모델 파일만 제공합니다.** PDF 원본, 렌더링 이미지, OCR 결과는 브라우저 메모리 안에서 처리됩니다.
-- NER 은 별도 NLP 빌드(`npm run build:nlp`)에서만 포함됩니다. 모델은 자동 다운로드하지 않고 사용자가 받아둔 폴더를 선택합니다.
+- NER 런타임은 기본 빌드에 포함됩니다. 모델은 자동 다운로드하지 않고 사용자가 받아둔 폴더를 선택합니다.
 
 ## 기술 스택
 
 - React 19 + Vite 5 + TypeScript
 - [MuPDF.js 1.27](https://www.npmjs.com/package/mupdf) (WASM) — Web Worker 안에 격리, comlink RPC
 - Zustand (단일 스토어 + undo/redo)
-- @huggingface/transformers + onnxruntime-web (NLP 빌드 전용, 로컬 WASM 서빙)
+- @huggingface/transformers + onnxruntime-web (NER 런타임, 로컬 WASM 서빙)
 - @paddleocr/paddleocr-js + onnxruntime-web (OCR 런타임과 모델 자산을 same-origin 정적 파일로 서빙)
 - shadcn/ui (Radix Primitives + Tailwind) — 디자인 시스템 토큰화, 16개 ui primitive
 - Sonner (토스트)
@@ -49,7 +49,7 @@ npm run lint     # tsc -b 타입 체크
 1. **PDF 열기** — 화면에 파일을 드롭하거나 상단 `PDF 열기` 버튼으로 선택합니다.
 2. **자동 탐지 검수** — 왼쪽 패널의 카테고리(주민/전화/이메일/계좌/사업자/카드)에서 페이지별 후보를 확인하고 제외할 항목은 체크 해제합니다. 텍스트 레이어가 부족한 페이지는 브라우저 OCR 이 이미지 텍스트 후보를 보강합니다.
 3. **누락 영역 보강** — PDF 위에서 드래그해 수동 박스를 추가합니다. 텍스트만 선택하려면 Shift 를 누른 채 드래그합니다.
-4. **NER 모델 로드(선택)** — NLP 빌드에서는 상단 `NER 모델 로드` 버튼으로 받아둔 OpenAI privacy-filter 모델 폴더를 선택해 비정형 PII 후보를 추가할 수 있습니다.
+4. **NER 모델 로드(선택)** — 상단 `NER 모델 로드` 버튼으로 받아둔 OpenAI privacy-filter 모델 폴더를 선택해 비정형 PII 후보를 추가할 수 있습니다. OCR 로 추출한 텍스트도 모델이 로드되어 있으면 NER 후보 생성에 사용됩니다.
 5. **익명화 적용 → 저장** — 상단의 익명화 버튼으로 redaction 을 수행하면 검증 리포트가 표시되고, `PDF 저장` 으로 내 PC 에 저장합니다.
 
 ## 프로젝트 구조

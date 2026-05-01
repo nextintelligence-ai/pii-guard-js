@@ -18,14 +18,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-// NLP 모드에서만 NER 버튼을 렌더한다. lazy + 동적 import 로 기본 빌드(`dist/index.html`)
-// 에 NER 워커 / @huggingface/transformers / onnxruntime-web 번들이 포함되지 않도록 한다.
-// `import.meta.env.MODE` 는 빌드 시점에 literal 로 치환되므로 default 모드에서는 아래
-// `lazy(...)` 호출 자체가 dead code 가 되어 chunk 가 emit 되지 않는다.
-const NerLoadButton =
-  import.meta.env.MODE === 'nlp'
-    ? lazy(() => import('@/components/NerLoadButton'))
-    : null;
+const NerLoadButton = lazy(() => import('@/components/NerLoadButton'));
 
 type Props = {
   onLoad(f: File): void;
@@ -132,14 +125,10 @@ export function Toolbar({ onLoad, onApply, onHelp }: Props) {
           <TooltipContent>전체 문서 OCR</TooltipContent>
         </Tooltip>
 
-        {NerLoadButton && (
-          <>
-            <Separator orientation="vertical" className="h-6" />
-            <Suspense fallback={null}>
-              <NerLoadButton />
-            </Suspense>
-          </>
-        )}
+        <Separator orientation="vertical" className="h-6" />
+        <Suspense fallback={null}>
+          <NerLoadButton />
+        </Suspense>
 
         <div className="flex-1" />
 

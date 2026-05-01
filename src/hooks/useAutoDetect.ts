@@ -41,7 +41,10 @@ export function useAutoDetect() {
           remaining[c.id] = box;
         }
         useAppStore.setState({
-          candidates: [...s.candidates.filter((c) => c.source === 'ner'), ...candidates],
+          candidates: [
+            ...s.candidates.filter((c) => !(c.source === 'auto' && c.pageIndex === page)),
+            ...candidates,
+          ],
           boxes: remaining,
         });
         console.info('[useAutoDetect] 정규식 자동탐지 완료', {
