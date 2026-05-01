@@ -25,6 +25,7 @@ const ORT_KNOWN_NOISE_PATTERNS = [
   ...ORT_EP_ASSIGNMENT_WARNING_PATTERNS,
   'GatherBlockQuantized',
   'NormalizeDispatchGroupSize Invalid dispatch group size',
+  'Inputs given to model',
 ];
 
 export function installOrtWarningFilter(target: WarnTarget = console): void {

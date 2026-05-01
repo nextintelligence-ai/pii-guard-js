@@ -386,6 +386,35 @@ describe('ner.worker', () => {
     }
   });
 
+  it('WebGPU q4 classify 실패 시 fp32 모델이 없으면 fallback 경고를 직접 남기지 않는다', async () => {
+    await import('@/workers/ner.worker');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const q4Classifier = Object.assign(
+      vi.fn().mockRejectedValue(
+        new Error('GatherBlockQuantized Invalid dispatch group size (0, 1, 1)'),
+      ),
+      {
+        model: { config: { id2label: { 0: 'O', 1: 'private_person' } } },
+      },
+    );
+    hf.pipeline.mockResolvedValue(q4Classifier);
+
+    try {
+      await exposedApi().load(modelDirectory(['model_q4.onnx']));
+
+      await expect(exposedApi().classify('My name is Alice Smith.')).rejects.toThrow(
+        'GatherBlockQuantized',
+      );
+
+      expect(warn).not.toHaveBeenCalledWith(
+        '[ner.worker] WebGPU q4 classify 실패 — fp32 WASM fallback 모델이 없습니다.',
+        expect.anything(),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('PDF 줄바꿈과 모델 word 공백이 달라도 char offset 을 복원한다', async () => {
     await import('@/workers/ner.worker');
 

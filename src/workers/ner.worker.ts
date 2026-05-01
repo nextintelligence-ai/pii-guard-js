@@ -222,11 +222,6 @@ async function recoverFromClassifyFailure(error: unknown): Promise<boolean> {
   if (backend !== 'webgpu' || activeDtype !== 'q4') return false;
   const hasFp32 = await hasModelFile('fp32');
   if (!hasFp32) {
-    workerWarn('[ner.worker] WebGPU q4 classify 실패 — fp32 WASM fallback 모델이 없습니다.', {
-      backend,
-      dtype: activeDtype,
-      error,
-    });
     return false;
   }
 

@@ -33,6 +33,10 @@ describe('ORT runtime config', () => {
     target.error(
       "An error occurred during model execution: \"Error: failed to call OrtRun(). ERROR_CODE: 1, ERROR_MESSAGE: Non-zero status code returned while running GatherBlockQuantized node. Name:'/model/embed_tokens/Gather_Quant' Status Message: program_manager.cc:22 NormalizeDispatchGroupSize Invalid dispatch group size (0, 1, 1)\".",
     );
+    target.error('Inputs given to model:', {
+      input_ids: { dims: [1, 519] },
+      attention_mask: { dims: [1, 519] },
+    });
     target.warn('다른 경고');
     target.log('다른 로그');
     target.error('다른 에러');
