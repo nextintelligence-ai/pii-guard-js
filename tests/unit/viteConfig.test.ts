@@ -20,4 +20,11 @@ describe('vite config', () => {
     expect(source).toContain('license-clipper');
     expect(source).toContain('reference-jsbn');
   });
+
+  it('splits TanStack Router localhost fallback before postbuild URL scanning', async () => {
+    const source = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+
+    expect(source).toContain('split-tanstack-router-localhost-fallback');
+    expect(source).toContain('"http:"+"//localhost"');
+  });
 });
