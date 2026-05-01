@@ -282,6 +282,59 @@ describe('OCR 탐지 플로우', () => {
     expect(state.boxes[candidate!.id]?.bbox[0]).toBeGreaterThan(0);
   });
 
+  it('OCR-NER 는 정규식 탐지 영역의 structured NER category 를 저장하지 않는다', async () => {
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-email',
+          pageIndex: 0,
+          text: '이메일 alice@example.com',
+          score: 0.96,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_email',
+        start: 4,
+        end: 21,
+        score: 0.99,
+        word: 'alice@example.com',
+      },
+    ]);
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().ocrProgress.byPage[0]?.status === 'done');
+
+    const state = useAppStore.getState();
+    expect(state.candidates.some((candidate) => candidate.source === 'ocr')).toBe(true);
+    expect(state.candidates.some((candidate) => candidate.source === 'ocr-ner')).toBe(false);
+    expect(
+      Object.values(state.boxes).some((box) => box.source === 'ocr-ner'),
+    ).toBe(false);
+  });
+
   it('known OCR-NER 런타임 오류는 경고를 반복하지 않고 OCR 후보 저장을 막지 않는다', async () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);

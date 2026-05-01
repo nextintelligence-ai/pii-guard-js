@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { detectOcrCandidates } from '@/core/ocr/detect';
 import { removeDuplicateOcrCandidates } from '@/core/ocr/dedupe';
 import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
+import { filterOcrNerBoxes } from '@/core/ocr/nerCandidates';
 import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { logNerDebug, summarizeNerEntities } from '@/core/nerDebug';
 import { useAppStore } from '@/state/store';
@@ -140,13 +141,17 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
                 )
               : { boxes: [], disableForRun: false };
           if (ocrNer.disableForRun) ocrNerDisabledForRun = true;
-          const ocrNerBoxes = ocrNer.boxes;
           if (isStaleJob()) return;
           const state = useAppStore.getState();
           const existingCandidates = state.candidates.filter(
             (candidate) => candidate.source !== 'ocr' && candidate.source !== 'ocr-ner',
           );
           const candidates = removeDuplicateOcrCandidates(ocrCandidates, existingCandidates);
+          const ocrNerBoxes = filterOcrNerBoxes({
+            pageIndex,
+            boxes: ocrNer.boxes,
+            primaryCandidates: [...existingCandidates, ...candidates],
+          });
           state.addOcrCandidates(candidates, [pageIndex]);
           state.addOcrNerCandidates(pageIndex, ocrNerBoxes);
           logOcrSuccess({
