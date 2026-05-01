@@ -41,7 +41,7 @@ const api: NerWorkerApi = {
     classifier = null;
     labelMap = {};
     const startedAt = performance.now();
-    console.info('[ner.worker] 모델 로드 시작', {
+    workerInfo('[ner.worker] 모델 로드 시작', {
       hasModelDirectory: activeModelDir !== null,
     });
 
@@ -51,7 +51,7 @@ const api: NerWorkerApi = {
     const cfg = (pipe as unknown as { model: { config: { id2label?: Record<number, string> } } }).model
       .config;
     labelMap = cfg.id2label ?? {};
-    console.info('[ner.worker] 모델 로드 완료', {
+    workerInfo('[ner.worker] 모델 로드 완료', {
       backend,
       dtype,
       labels: Object.keys(labelMap).length,
@@ -63,7 +63,7 @@ const api: NerWorkerApi = {
     if (!classifier) throw new Error('classifier not loaded');
     const SCORE_FLOOR = 0.5;
     const startedAt = performance.now();
-    console.info('[ner.worker] classify 시작', {
+    workerInfo('[ner.worker] classify 시작', {
       backend,
       chars: text.length,
     });
@@ -71,11 +71,11 @@ const api: NerWorkerApi = {
     const scored = out.filter((e) => e.score >= SCORE_FLOOR);
     const normalized = normalizeEntities(text, scored);
     if (normalized.skippedWithoutOffsets > 0) {
-      console.info('[ner.worker] char offset 을 복원하지 못한 entity 가 있습니다.', {
+      workerInfo('[ner.worker] char offset 을 복원하지 못한 entity 가 있습니다.', {
         skippedWithoutOffsets: normalized.skippedWithoutOffsets,
       });
     }
-    console.info('[ner.worker] classify 완료', {
+    workerInfo('[ner.worker] classify 완료', {
       backend,
       chars: text.length,
       rawEntities: out.length,
@@ -93,12 +93,18 @@ const api: NerWorkerApi = {
 };
 
 Comlink.expose(api);
+workerInfo('[ner.worker] worker module ready');
+postWorkerMessage('ner-worker-ready');
 
 async function loadBestPipeline(): Promise<PipelineLoadResult> {
   const failures: PipelineLoadFailure[] = [];
   const hasQ4 = await hasModelFile('q4');
   const hasFp32 = await hasModelFile('fp32');
   const hasFp16 = await hasModelFile('fp16');
+  workerInfo('[ner.worker] 모델 파일 확인', { hasQ4, hasFp32, hasFp16 });
+  if (hasQ4 && !hasFp32 && !hasFp16) {
+    workerInfo('[ner.worker] q4 모델만 발견 — WebGPU 로드가 필요하며 WASM fallback 은 없습니다.');
+  }
 
   if (hasQ4) {
     const loaded = await tryLoadPipeline('webgpu', 'q4', failures);
@@ -124,14 +130,24 @@ async function tryLoadPipeline(
   failures: PipelineLoadFailure[],
 ): Promise<PipelineLoadResult | null> {
   try {
+    const startedAt = performance.now();
+    workerInfo('[ner.worker] backend 로드 시도', {
+      backend: backendName,
+      dtype,
+    });
     const pipe = await pipeline('token-classification', 'privacy-filter', {
       device: backendName,
       dtype,
     } as never);
+    workerInfo('[ner.worker] backend 로드 성공', {
+      backend: backendName,
+      dtype,
+      ms: elapsedMs(startedAt),
+    });
     return { pipe, backend: backendName, dtype };
   } catch (error) {
     failures.push({ backend: backendName, dtype, error });
-    console.warn('[ner.worker] NER backend 로드 실패', {
+    workerWarn('[ner.worker] NER backend 로드 실패', {
       backend: backendName,
       dtype,
       error,
@@ -253,7 +269,7 @@ async function responseFromModelDir(
 ): Promise<Response> {
   try {
     const file = await readFileFromDir(root, relativePath);
-    console.info('[ner.worker] 모델 파일 로드', {
+    workerInfo('[ner.worker] 모델 파일 로드', {
       path: relativePath,
       bytes: file.size,
     });
@@ -455,4 +471,47 @@ function uniqueNonEmpty(values: string[]): string[] {
 
 function elapsedMs(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
+}
+
+function workerInfo(message: string, payload?: unknown): void {
+  const args = compactArgs(message, payload);
+  console.info(...args);
+  postWorkerLog('info', args);
+}
+
+function workerWarn(message: string, payload?: unknown): void {
+  const args = compactArgs(message, payload);
+  console.warn(...args);
+  postWorkerLog('warn', args);
+}
+
+function compactArgs(message: string, payload?: unknown): unknown[] {
+  return payload === undefined ? [message] : [message, sanitizeLogValue(payload)];
+}
+
+function postWorkerLog(level: 'info' | 'warn' | 'error', args: unknown[]): void {
+  postWorkerMessage({ type: 'ner-worker-log', level, args });
+}
+
+function postWorkerMessage(message: unknown): void {
+  try {
+    self.postMessage(message);
+  } catch {
+    // Console logging must never break NER execution.
+  }
+}
+
+function sanitizeLogValue(value: unknown, depth = 0): unknown {
+  if (depth > 3) return '[depth-limit]';
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack };
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, depth + 1));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      sanitizeLogValue(item, depth + 1),
+    ]),
+  );
 }

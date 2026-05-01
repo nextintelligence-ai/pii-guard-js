@@ -194,23 +194,40 @@ describe('ner.worker', () => {
 
   it('q4 모델은 WebGPU backend 로 로드한다', async () => {
     await import('@/workers/ner.worker');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
 
-    const result = await exposedApi().load(modelDirectory());
+    try {
+      const result = await exposedApi().load(modelDirectory());
 
-    expect(result).toEqual({
-      backend: 'webgpu',
-      labelMap: { 0: 'O', 1: 'private_person' },
-    });
-    expect(hf.pipeline).toHaveBeenCalledWith(
-      'token-classification',
-      'privacy-filter',
-      { device: 'webgpu', dtype: 'q4' },
-    );
-    expect(hf.pipeline).not.toHaveBeenCalledWith(
-      'token-classification',
-      'privacy-filter',
-      { device: 'wasm', dtype: 'q4' },
-    );
+      expect(result).toEqual({
+        backend: 'webgpu',
+        labelMap: { 0: 'O', 1: 'private_person' },
+      });
+      expect(hf.pipeline).toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'webgpu', dtype: 'q4' },
+      );
+      expect(hf.pipeline).not.toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'wasm', dtype: 'q4' },
+      );
+      expect(info).toHaveBeenCalledWith(
+        '[ner.worker] 모델 파일 확인',
+        expect.objectContaining({
+          hasQ4: true,
+          hasFp32: false,
+          hasFp16: false,
+        }),
+      );
+      expect(info).toHaveBeenCalledWith(
+        '[ner.worker] backend 로드 시도',
+        expect.objectContaining({ backend: 'webgpu', dtype: 'q4' }),
+      );
+    } finally {
+      info.mockRestore();
+    }
   });
 
   it('WebGPU q4 로드가 실패하면 fp32 모델을 WASM 으로 fallback 한다', async () => {

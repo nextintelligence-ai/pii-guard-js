@@ -95,6 +95,7 @@ describe('useNerModel', () => {
   });
 
   it('동일 화면의 여러 hook 인스턴스가 모델 로드 상태를 공유한다', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     let first: UseNerModel | null = null;
     let second: UseNerModel | null = null;
 
@@ -119,8 +120,31 @@ describe('useNerModel', () => {
 
     expect(requireSession(first).state).toBe('ready');
     expect(requireSession(second).state).toBe('ready');
+    expect(info).toHaveBeenCalledWith(
+      '[useNerModel] NER worker 모델 로드 호출 시작',
+      expect.objectContaining({ id: expect.any(String) }),
+    );
     expect(fakeWorker.load).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'directory' }),
+    );
+  });
+
+  it('캐시된 모델이 없으면 수동 로드가 필요하다는 로그를 한 번 남긴다', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    function Probe() {
+      useNerModel();
+      return null;
+    }
+
+    const container = document.createElement('div');
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    expect(info).toHaveBeenCalledWith(
+      '[useNerModel] 캐시 모델 없음 — NER 모델 로드 버튼으로 모델 폴더를 선택해야 합니다.',
     );
   });
 

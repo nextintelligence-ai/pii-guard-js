@@ -51,4 +51,21 @@ describe('NerLoadButton', () => {
     expect(container.textContent).toContain('NER 신뢰도 0.75');
     expect(container.querySelector('input[aria-label="NER 신뢰도 임계값"]')).not.toBeNull();
   });
+
+  it('shows an explicit loading label while the model is loading', async () => {
+    useNerModelStore.setState({
+      state: 'loading',
+      meta: null,
+      worker: null,
+    });
+
+    const container = document.createElement('div');
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<NerLoadButton />);
+    });
+
+    expect(container.textContent).toContain('NER 로드 중...');
+    expect(container.querySelector('button')?.disabled).toBe(true);
+  });
 });

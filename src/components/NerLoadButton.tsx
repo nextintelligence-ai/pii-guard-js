@@ -13,6 +13,14 @@ export function NerLoadButton() {
   const ner = useNerModel();
   const nerThreshold = useAppStore((s) => s.nerThreshold);
   const setNerThreshold = useAppStore((s) => s.setNerThreshold);
+  const label =
+    ner.state === 'ready'
+      ? 'NER 로드됨'
+      : ner.state === 'loading'
+        ? 'NER 로드 중...'
+        : ner.state === 'error'
+          ? 'NER 다시 로드'
+          : 'NER 모델 로드';
 
   return (
     <div className="flex items-center gap-2">
@@ -22,7 +30,7 @@ export function NerLoadButton() {
         onClick={() => void ner.loadFromUserDir()}
         disabled={ner.state === 'loading'}
       >
-        {ner.state === 'ready' ? 'NER 로드됨' : 'NER 모델 로드'}
+        {label}
       </Button>
       {ner.state === 'ready' && (
         <div className="flex min-w-[190px] items-center gap-2">

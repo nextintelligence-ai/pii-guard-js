@@ -29,6 +29,7 @@ export interface UseNerModel {
 }
 
 let cachedLoadStarted = false;
+let noCachedModelLogged = false;
 
 export const useNerModelStore = create<UseNerModel>((set, get) => ({
   state: 'idle',
@@ -56,8 +57,8 @@ export const useNerModelStore = create<UseNerModel>((set, get) => ({
       const modelDir = await copyDirToOpfs(dirHandle, id);
       console.info('[useNerModel] 모델 OPFS 복사 완료', { id });
       const w = await spawnNerWorker();
-      console.info('[useNerModel] NER worker spawn 완료');
-      const { labelMap } = await w.load(modelDir);
+      console.info('[useNerModel] NER worker 초기화 완료');
+      const { labelMap } = await loadModelInWorker(w, modelDir, { id, source: 'user' });
       const newMeta: ModelMeta = {
         id,
         modelName: 'openai/privacy-filter',
@@ -84,6 +85,7 @@ export const useNerModelStore = create<UseNerModel>((set, get) => ({
     const worker = get().worker;
     void worker?.unload();
     cachedLoadStarted = false;
+    noCachedModelLogged = false;
     set({ worker: null, meta: null, state: 'idle' });
     localStorage.removeItem(NER_MODEL_META_KEY);
   },
@@ -95,7 +97,16 @@ export function useNerModel(): UseNerModel {
   // 첫 마운트 시 캐시 메타가 있으면 자동 로드 시도. OPFS 안에 모델 파일이 살아있음을 가정한다.
   useEffect(() => {
     const cachedMeta = readModelMeta();
-    if (!cachedMeta || cachedLoadStarted) return;
+    if (!cachedMeta) {
+      if (!noCachedModelLogged) {
+        noCachedModelLogged = true;
+        console.info(
+          '[useNerModel] 캐시 모델 없음 — NER 모델 로드 버튼으로 모델 폴더를 선택해야 합니다.',
+        );
+      }
+      return;
+    }
+    if (cachedLoadStarted) return;
     cachedLoadStarted = true;
 
     void (async () => {
@@ -105,7 +116,10 @@ export function useNerModel(): UseNerModel {
       try {
         const modelDir = await getCachedModelDir(cachedMeta.id);
         const w = await spawnNerWorker();
-        const { labelMap, backend } = await w.load(modelDir);
+        const { labelMap, backend } = await loadModelInWorker(w, modelDir, {
+          id: cachedMeta.id,
+          source: 'cache',
+        });
         useNerModelStore.setState({ worker: w, state: 'ready' });
         console.log(
           `[useNerModel] 캐시에서 로드 (backend=${backend}, labels=${Object.keys(labelMap).length})`,
@@ -125,6 +139,26 @@ export function useNerModel(): UseNerModel {
   }, []);
 
   return session;
+}
+
+async function loadModelInWorker(
+  worker: NerWorkerApi,
+  modelDir: FileSystemDirectoryHandle,
+  details: { id: string; source: 'user' | 'cache' },
+): ReturnType<NerWorkerApi['load']> {
+  const startedAt = performance.now();
+  console.info('[useNerModel] NER worker 모델 로드 호출 시작', details);
+  const warningId = setInterval(() => {
+    console.warn('[useNerModel] NER worker 모델 로드 대기 중', {
+      ...details,
+      ms: elapsedMs(startedAt),
+    });
+  }, 10_000);
+  try {
+    return await worker.load(modelDir);
+  } finally {
+    clearInterval(warningId);
+  }
 }
 
 function elapsedMs(startedAt: number): number {
