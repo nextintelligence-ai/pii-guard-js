@@ -18,7 +18,7 @@ export type NerProgress = { done: number; total: number };
 export type DocState =
   | { kind: 'empty' }
   | { kind: 'loading' }
-  | { kind: 'ready'; pages: PageMeta[]; fileName: string }
+  | { kind: 'ready'; pages: PageMeta[]; fileName: string; sourceId?: string }
   | { kind: 'applying' }
   | { kind: 'error'; message: string };
 

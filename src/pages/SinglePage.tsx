@@ -22,7 +22,11 @@ import { usePendingFileStore } from '@/state/pendingFileStore';
 
 const NerRuntime = lazy(() => import('@/components/NerRuntime'));
 
-export function SinglePage() {
+type Props = {
+  embedded?: boolean;
+};
+
+export function SinglePage({ embedded = false }: Props) {
   useKeyboard();
   useAutoDetect();
   useOcrDetect();
@@ -33,17 +37,24 @@ export function SinglePage() {
   const consumedPendingFile = useRef(false);
 
   useEffect(() => {
+    if (embedded) return;
     if (consumedPendingFile.current) return;
     consumedPendingFile.current = true;
     const file = usePendingFileStore.getState().consumeSingleFile();
     if (file) void load(file);
-  }, [load]);
+  }, [embedded, load]);
 
   return (
     <>
-      <Toolbar onLoad={load} onApply={apply} onHelp={openHelp} />
-      <main className="grid flex-1 grid-cols-[320px_1fr] gap-3 p-3">
-        <Card className="flex flex-col overflow-hidden p-1 pt-3">
+      <Toolbar
+        onLoad={load}
+        onApply={apply}
+        onHelp={openHelp}
+        showFileOpen={!embedded}
+        showApply={!embedded}
+      />
+      <main className="grid min-h-0 flex-1 grid-cols-[320px_1fr] gap-3 p-3">
+        <Card className="flex min-h-0 flex-col overflow-hidden p-1 pt-3">
           {doc.kind === 'ready' ? (
             <ScrollArea className="flex-1">
               <div className="p-3">
@@ -99,9 +110,22 @@ export function SinglePage() {
           )}
         </Card>
 
-        <Card className="flex flex-col items-center justify-center overflow-hidden p-3">
+        <Card className="flex min-h-0 flex-col items-center justify-center overflow-hidden p-3">
           {doc.kind === 'empty' || doc.kind === 'loading' ? (
-            <DropZone onFile={load} />
+            embedded ? (
+              <div className="flex flex-col items-center gap-3 text-center">
+                {doc.kind === 'loading' ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-muted-foreground/60" />
+                ) : (
+                  <ScanSearch className="h-10 w-10 text-muted-foreground/60" />
+                )}
+                <p className="text-sm text-muted-foreground">
+                  선택한 batch PDF를 준비 중입니다.
+                </p>
+              </div>
+            ) : (
+              <DropZone onFile={load} />
+            )
           ) : doc.kind === 'ready' ? (
             <>
               <div className="max-h-[calc(100vh-180px)] w-full overflow-auto">

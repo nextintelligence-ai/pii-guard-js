@@ -51,4 +51,46 @@ describe('Toolbar', () => {
 
     expect(container.textContent).toContain('NER 모델 로드');
   });
+
+  it('shows file open and apply controls by default', async () => {
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <Toolbar
+          onLoad={() => undefined}
+          onApply={() => undefined}
+          onHelp={() => undefined}
+        />,
+      );
+    });
+
+    expect(container.querySelector('input[type="file"]')).not.toBeNull();
+    expect(container.textContent).toContain('PDF 열기');
+    expect(container.textContent).toContain('익명화 적용');
+  });
+
+  it('hides file open and apply controls when requested while keeping OCR actions', async () => {
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <Toolbar
+          onLoad={() => undefined}
+          onApply={() => undefined}
+          onHelp={() => undefined}
+          showFileOpen={false}
+          showApply={false}
+        />,
+      );
+    });
+
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(container.textContent).not.toContain('PDF 열기');
+    expect(container.textContent).not.toContain('익명화 적용');
+    expect(container.querySelector('button[aria-label="현재 페이지 OCR"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="전체 문서 OCR"]')).not.toBeNull();
+  });
 });

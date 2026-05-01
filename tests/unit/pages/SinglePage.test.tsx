@@ -39,4 +39,19 @@ describe('SinglePage', () => {
     expect(container.textContent).toContain('아직 검사할 PDF가 없습니다');
     expect(container.textContent).toContain('PDF 파일을 여기에 드롭하세요');
   });
+
+  it('embedded 모드에서는 파일 열기와 익명화 적용을 숨기고 OCR 제어는 유지한다', async () => {
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SinglePage embedded />);
+    });
+
+    expect(container.textContent).not.toContain('PDF 열기');
+    expect(container.textContent).not.toContain('익명화 적용');
+    expect(container.textContent).not.toContain('PDF 파일을 여기에 드롭하세요');
+    expect(container.querySelector('button[aria-label="현재 페이지 OCR"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="전체 문서 OCR"]')).not.toBeNull();
+  });
 });

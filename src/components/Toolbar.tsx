@@ -24,9 +24,17 @@ type Props = {
   onLoad(f: File): void;
   onApply(): void;
   onHelp(): void;
+  showFileOpen?: boolean;
+  showApply?: boolean;
 };
 
-export function Toolbar({ onLoad, onApply, onHelp }: Props) {
+export function Toolbar({
+  onLoad,
+  onApply,
+  onHelp,
+  showFileOpen = true,
+  showApply = true,
+}: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
   const currentPage = useAppStore((s) => s.currentPage);
   const requestOcrPage = useAppStore((s) => s.requestOcrPage);
@@ -36,23 +44,27 @@ export function Toolbar({ onLoad, onApply, onHelp }: Props) {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="flex items-center gap-2 border-b bg-background px-4 py-2 shadow-sm">
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onLoad(f);
-            e.target.value = '';
-          }}
-        />
-        <Button size="sm" onClick={() => inputRef.current?.click()}>
-          <FolderOpen />
-          PDF 열기
-        </Button>
+        {showFileOpen && (
+          <>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="application/pdf"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onLoad(f);
+                e.target.value = '';
+              }}
+            />
+            <Button size="sm" onClick={() => inputRef.current?.click()}>
+              <FolderOpen />
+              PDF 열기
+            </Button>
 
-        <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6" />
+          </>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>
@@ -132,15 +144,17 @@ export function Toolbar({ onLoad, onApply, onHelp }: Props) {
 
         <div className="flex-1" />
 
-        <Button
-          size="sm"
-          variant="destructive"
-          onClick={onApply}
-          disabled={docKind !== 'ready'}
-        >
-          <Shield />
-          익명화 적용
-        </Button>
+        {showApply && (
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={onApply}
+            disabled={docKind !== 'ready'}
+          >
+            <Shield />
+            익명화 적용
+          </Button>
+        )}
       </div>
     </TooltipProvider>
   );

@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BatchDropZone } from '@/components/batch/BatchDropZone';
 import { BatchJobTable } from '@/components/batch/BatchJobTable';
+import { BatchReviewDialog } from '@/components/batch/BatchReviewDialog';
 import { BatchSettings } from '@/components/batch/BatchSettings';
 import { BatchSummary } from '@/components/batch/BatchSummary';
 import { BatchToolbar } from '@/components/batch/BatchToolbar';
@@ -15,6 +16,7 @@ export function BatchPage() {
   const reset = useBatchStore((s) => s.reset);
   const { running, start, pause } = useBatchRunner();
   const consumedPendingFiles = useRef(false);
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (consumedPendingFiles.current) return;
@@ -46,7 +48,14 @@ export function BatchPage() {
       <BatchSettings />
       <BatchDropZone onFiles={addFiles} />
       <BatchSummary />
-      <BatchJobTable jobs={jobs} />
+      <BatchJobTable jobs={jobs} onReview={setReviewJobId} />
+      <BatchReviewDialog
+        jobId={reviewJobId}
+        open={reviewJobId !== null}
+        onOpenChange={(open) => {
+          if (!open) setReviewJobId(null);
+        }}
+      />
     </main>
   );
 }
