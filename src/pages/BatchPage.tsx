@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { BatchDropZone } from '@/components/batch/BatchDropZone';
 import { BatchJobTable } from '@/components/batch/BatchJobTable';
 import { BatchReviewDialog } from '@/components/batch/BatchReviewDialog';
@@ -15,15 +15,16 @@ export function BatchPage() {
   const addFiles = useBatchStore((s) => s.addFiles);
   const reset = useBatchStore((s) => s.reset);
   const { running, start, pause } = useBatchRunner();
-  const consumedPendingFiles = useRef(false);
+  const initializedRouteEntry = useRef(false);
   const [reviewJobId, setReviewJobId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (consumedPendingFiles.current) return;
-    consumedPendingFiles.current = true;
+  useLayoutEffect(() => {
+    if (initializedRouteEntry.current) return;
+    initializedRouteEntry.current = true;
     const files = usePendingFileStore.getState().consumeBatchFiles();
-    if (files.length > 0) addFiles(files);
-  }, [addFiles]);
+    reset();
+    if (files.length > 0) useBatchStore.getState().addFiles(files);
+  }, [reset]);
 
   const doneJobs = jobs.filter((job) => job.status === 'done' && job.outputBlob);
 

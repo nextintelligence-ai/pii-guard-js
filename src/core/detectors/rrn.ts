@@ -1,6 +1,7 @@
 import type { DetectorMatch, DetectorRule } from './types';
 
 const RE = /\b(\d{6})-?(\d{7})\b/g;
+const MASKED_RE = /(^|[^\d])(\d{6})-(\*{7})(?!\*)/g;
 const W = [2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5];
 
 function rrnChecksum(d: string): boolean {
@@ -24,6 +25,18 @@ export const rrnRule: DetectorRule = {
         end: m.index + m[0].length,
         matched: m[0],
         confidence: ok ? 1 : 0.5,
+      });
+    }
+    for (const m of text.matchAll(MASKED_RE)) {
+      if (m.index === undefined) continue;
+      const prefix = m[1] ?? '';
+      const matched = `${m[2]}-${m[3]}`;
+      const start = m.index + prefix.length;
+      out.push({
+        start,
+        end: start + matched.length,
+        matched,
+        confidence: 0.5,
       });
     }
     return out;

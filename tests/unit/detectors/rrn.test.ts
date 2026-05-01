@@ -16,6 +16,16 @@ describe('rrnRule', () => {
     expect(r[0]?.confidence ?? 0).toBeLessThan(1);
   });
 
+  it('뒤 7자리가 마스킹된 주민번호도 매칭한다', () => {
+    const r = rrnRule.scan('주민등록번호 111111-*******');
+
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({
+      matched: '111111-*******',
+      confidence: 0.5,
+    });
+  });
+
   it('형식이 아닌 숫자열은 매칭하지 않는다', () => {
     expect(rrnRule.scan('1234567890').length).toBe(0);
   });

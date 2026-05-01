@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { detectOcrCandidates } from '@/core/ocr/detect';
 import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
 import { runBatchJob } from '@/core/batch/runBatchJob';
+import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { buildContextualNerMaps } from '@/core/nerContext';
 import { entitiesToBoxes, serialize, type NerBox } from '@/core/spanMap';
 import { useNerModel } from '@/hooks/useNerModel';
@@ -108,7 +109,7 @@ function createOcrDetector(
     });
     if (pageText.trim().length === 0) return candidates;
 
-    const entities = await nerWorker.classify(pageText);
+    const entities = filterNerEntitiesForText(pageText, await nerWorker.classify(pageText));
     const nerBoxes = ocrLinesToNerBoxes({
       renderScale: rendered.scale,
       lines: result.lines,
@@ -128,12 +129,20 @@ function createTextNerDetector(
     const boxes: NerBox[] = [];
 
     if (pageMap.pageText.trim().length > 0) {
-      boxes.push(...entitiesToBoxes(pageMap, await nerWorker.classify(pageMap.pageText)));
+      boxes.push(
+        ...entitiesToBoxes(
+          pageMap,
+          filterNerEntitiesForText(pageMap.pageText, await nerWorker.classify(pageMap.pageText)),
+        ),
+      );
     }
 
     for (const contextMap of buildContextualNerMaps(lines)) {
       if (contextMap.pageText.trim().length === 0) continue;
-      const entities = await nerWorker.classify(contextMap.pageText);
+      const entities = filterNerEntitiesForText(
+        contextMap.pageText,
+        await nerWorker.classify(contextMap.pageText),
+      );
       boxes.push(
         ...entitiesToBoxes(
           contextMap,

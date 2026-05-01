@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { detectOcrCandidates } from '@/core/ocr/detect';
 import { removeDuplicateOcrCandidates } from '@/core/ocr/dedupe';
 import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
+import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { useAppStore } from '@/state/store';
 import { useNerModel } from './useNerModel';
 import { getOcrWorker } from '@/workers/ocrWorkerClient';
@@ -193,7 +194,7 @@ async function detectOcrNerBoxes(
 ): Promise<NerBox[]> {
   const { pageText } = ocrLinesToPageText(input);
   if (pageText.trim().length === 0) return [];
-  const entities = await nerWorker.classify(pageText);
+  const entities = filterNerEntitiesForText(pageText, await nerWorker.classify(pageText));
   if (isStaleJob()) return [];
   return ocrLinesToNerBoxes({ ...input, entities });
 }

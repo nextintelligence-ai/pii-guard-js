@@ -82,8 +82,8 @@ const initial: State = {
     businessNo: true,
     card: true,
     address: true,
-    // NER 카테고리는 기본 OFF — 사용자가 명시적으로 활성화해야 박스가 적용된다.
-    private_person: false,
+    // 사람 이름은 기본 적용한다. 다른 NER 카테고리는 오탐 검토를 위해 사용자가 켠다.
+    private_person: true,
     private_address: false,
     private_url: false,
     private_date: false,
@@ -398,7 +398,7 @@ function buildNerRecords(
       confidence: b.score,
       source,
     });
-    // NER 카테고리는 기본 OFF. 사용자가 카테고리를 켠 경우에도 신뢰도 기준을 통과해야 한다.
+    // NER 카테고리가 켜져 있어도 신뢰도 기준을 통과해야 한다.
     const enabled = (s.categoryEnabled[category] ?? false) && b.score >= s.nerThreshold;
     newBoxes[id] = {
       id,

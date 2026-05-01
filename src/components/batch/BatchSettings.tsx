@@ -11,7 +11,7 @@ export function BatchSettings() {
 
   return (
     <div className="flex flex-wrap items-center gap-6 rounded-md border bg-background px-4 py-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 p-2">
         <Checkbox
           id="batch-use-ocr"
           checked={settings.useOcr}

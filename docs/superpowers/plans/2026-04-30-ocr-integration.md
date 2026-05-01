@@ -441,7 +441,7 @@ Append to `tests/unit/state/store.test.ts`:
         id: 'ocr-rrn-1',
         pageIndex: 0,
         bbox: [10, 20, 80, 34],
-        text: '801129-1234567',
+        text: '000000-0000001',
         category: 'rrn',
         confidence: 0.91,
         source: 'ocr',
@@ -739,7 +739,7 @@ describe('normalizeOcrResult', () => {
   it('trims empty OCR items and normalizes text to NFC', () => {
     const result = normalizeOcrResult({
       items: [
-        { text: '  801129-1234567  ', score: 0.92, poly: [[0, 0], [100, 0], [100, 20], [0, 20]] },
+        { text: '  000000-0000001  ', score: 0.92, poly: [[0, 0], [100, 0], [100, 20], [0, 20]] },
         { text: '   ', score: 0.7, poly: [[0, 30], [10, 30], [10, 40], [0, 40]] },
       ],
       metrics: { totalMs: 10, detectedBoxes: 1, recognizedCount: 1 },
@@ -750,7 +750,7 @@ describe('normalizeOcrResult', () => {
       {
         id: 'line-1',
         pageIndex: 0,
-        text: '801129-1234567',
+        text: '000000-0000001',
         score: 0.92,
         poly: [
           { x: 0, y: 0 },
@@ -820,7 +820,7 @@ describe('detectOcrCandidates', () => {
         {
           id: 'line-1',
           pageIndex: 0,
-          text: '주민번호 801129-1234567',
+          text: '주민번호 000000-0000001',
           score: 0.95,
           poly: [
             { x: 0, y: 0 },
@@ -835,7 +835,7 @@ describe('detectOcrCandidates', () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       pageIndex: 0,
-      text: '801129-1234567',
+      text: '000000-0000001',
       category: 'rrn',
       source: 'ocr',
     });
@@ -860,7 +860,7 @@ describe('removeDuplicateOcrCandidates', () => {
         id: 'auto-1',
         pageIndex: 0,
         bbox: [10, 10, 80, 30],
-        text: '801129-1234567',
+        text: '000000-0000001',
         category: 'rrn',
         confidence: 1,
         source: 'auto',
@@ -871,7 +871,7 @@ describe('removeDuplicateOcrCandidates', () => {
         id: 'ocr-1',
         pageIndex: 0,
         bbox: [12, 11, 82, 31],
-        text: '801129 1234567',
+        text: '000000 0000001',
         category: 'rrn',
         confidence: 0.93,
         source: 'ocr',
@@ -880,7 +880,7 @@ describe('removeDuplicateOcrCandidates', () => {
         id: 'ocr-2',
         pageIndex: 0,
         bbox: [120, 10, 190, 30],
-        text: '801129-1234567',
+        text: '000000-0000001',
         category: 'rrn',
         confidence: 0.91,
         source: 'ocr',
@@ -1703,7 +1703,7 @@ describe('OCR detection flow', () => {
         {
           id: 'line-1',
           pageIndex: 0,
-          text: '801129-1234567',
+          text: '000000-0000001',
           score: 0.93,
           poly: [
             { x: 0, y: 0 },

@@ -59,7 +59,7 @@ type Actions = {
 
 const initialSettings: BatchSettings = {
   useOcr: true,
-  autoApplyNer: false,
+  autoApplyNer: true,
 };
 
 function createJob(file: File): BatchJob {

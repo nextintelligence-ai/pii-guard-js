@@ -118,7 +118,7 @@ describe('NER 플로우 통합', () => {
     expect(Object.values(state.boxes)[0]).toMatchObject({
       source: 'ner',
       category: 'private_person',
-      enabled: false,
+      enabled: true,
       bbox: [55, 0, 110, 10],
     });
   });
@@ -218,27 +218,27 @@ describe('NER 플로우 통합', () => {
       '소속',
       '연락처',
       '사업총괄 PM',
-      '박종천',
+      '김가명',
       '대표이사',
       '010-2572-9243',
       '부PM',
-      '정지훈',
+      '이가명',
       '부장',
       '010-4326-2605',
       'AI 엔지니어',
-      '박태순',
+      '최가명',
       '부장',
-      '010-6298-9759',
+      '010-0000-0000',
       'AI 개발자',
-      '허지우',
+      '정가명',
       '차장',
       '010-5659-0421',
       'FE 개발자',
-      '강인찬',
+      '윤가명',
       '차장',
       '010-7774-3212',
       '클라우드/QA',
-      '박세림',
+      '한가명',
       '대리',
       '010-5092-5633',
     ];
@@ -261,48 +261,48 @@ describe('NER 플로우 통합', () => {
         return [
           {
             entity_group: 'private_person',
-            start: text.indexOf('박종천'),
-            end: text.indexOf('정지훈') + '정지훈'.length,
+            start: text.indexOf('김가명'),
+            end: text.indexOf('이가명') + '이가명'.length,
             score: 0.93,
-            word: '박종천\n정지훈',
+            word: '김가명\n이가명',
           },
           {
             entity_group: 'private_person',
-            start: text.indexOf('박태순'),
-            end: text.indexOf('박태순') + '박태순'.length,
+            start: text.indexOf('최가명'),
+            end: text.indexOf('최가명') + '최가명'.length,
             score: 0.93,
-            word: '박태순',
+            word: '최가명',
           },
           {
             entity_group: 'private_person',
-            start: text.indexOf('허지우'),
-            end: text.indexOf('허지우') + '허지우'.length,
+            start: text.indexOf('정가명'),
+            end: text.indexOf('정가명') + '정가명'.length,
             score: 0.93,
-            word: '허지우',
+            word: '정가명',
           },
           {
             entity_group: 'private_person',
-            start: text.indexOf('강인찬'),
-            end: text.indexOf('강인찬') + '강인찬'.length,
+            start: text.indexOf('윤가명'),
+            end: text.indexOf('윤가명') + '윤가명'.length,
             score: 0.99,
-            word: '강인찬',
+            word: '윤가명',
           },
           {
             entity_group: 'private_person',
-            start: text.indexOf('박세림'),
-            end: text.indexOf('박세림') + '박세림'.length,
+            start: text.indexOf('한가명'),
+            end: text.indexOf('한가명') + '한가명'.length,
             score: 0.98,
-            word: '박세림',
+            word: '한가명',
           },
         ];
       }
       return [
         {
           entity_group: 'private_person',
-          start: text.indexOf('박종천'),
-          end: text.indexOf('박종천') + '박종천'.length,
+          start: text.indexOf('김가명'),
+          end: text.indexOf('김가명') + '김가명'.length,
           score: 0.71,
-          word: '박종천',
+          word: '김가명',
         },
       ];
     });
@@ -333,9 +333,9 @@ describe('NER 플로우 통합', () => {
       '신청대상자',
       '성',
       '명',
-      '황선영',
+      '홍가명',
       '주민등록번호',
-      '801026-2221311',
+      '111111-1111111',
     ];
     fakePdfWorker.extractStructuredText.mockResolvedValueOnce(
       certificateLines.map((text, lineId) => ({
@@ -352,14 +352,14 @@ describe('NER 플로우 통합', () => {
       })),
     );
     fakeWorker.classify.mockImplementation(async (text: string) => {
-      if (text === '성명 황선영') {
+      if (text === '성명 홍가명') {
         return [
           {
             entity_group: 'private_person',
             start: 0,
             end: text.length,
             score: 0.97,
-            word: '성명 황선영',
+            word: '성명 홍가명',
           },
         ];
       }
@@ -389,9 +389,9 @@ describe('NER 플로우 통합', () => {
   it('소득자 성명 다음 줄 이름은 한 줄 문맥으로 재구성해 보강한다', async () => {
     const certificateLines = [
       '소득자 성명',
-      '박태순',
+      '최가명',
       '주민등록번호',
-      '801129-1031511',
+      '000000-0000001',
     ];
     fakePdfWorker.extractStructuredText.mockResolvedValueOnce(
       certificateLines.map((text, lineId) => ({
@@ -408,14 +408,14 @@ describe('NER 플로우 통합', () => {
       })),
     );
     fakeWorker.classify.mockImplementation(async (text: string) => {
-      if (text === '소득자 성명 박태순') {
+      if (text === '소득자 성명 최가명') {
         return [
           {
             entity_group: 'private_person',
-            start: text.indexOf('박태순'),
-            end: text.indexOf('박태순') + '박태순'.length,
+            start: text.indexOf('최가명'),
+            end: text.indexOf('최가명') + '최가명'.length,
             score: 0.97,
-            word: ' 박태순',
+            word: ' 최가명',
           },
         ];
       }
@@ -445,11 +445,11 @@ describe('NER 플로우 통합', () => {
   it('번호가 붙은 성명 라벨과 제출자 서명란 이름을 문맥 NER 로 보강한다', async () => {
     const certificateLines = [
       '① 성 명',
-      '박태순',
+      '최가명',
       '② 주민등록번호',
-      '801129-1031511',
+      '000000-0000001',
       '제출자',
-      '박태순  (서명 또는 인)',
+      '최가명  (서명 또는 인)',
       '세무서장',
     ];
     fakePdfWorker.extractStructuredText.mockResolvedValueOnce(
@@ -467,25 +467,25 @@ describe('NER 플로우 통합', () => {
       })),
     );
     fakeWorker.classify.mockImplementation(async (text: string) => {
-      if (text === '① 성 명 박태순') {
+      if (text === '① 성 명 최가명') {
         return [
           {
             entity_group: 'private_person',
             start: 0,
             end: text.length,
             score: 0.91,
-            word: ' 성 명 박태순',
+            word: ' 성 명 최가명',
           },
         ];
       }
-      if (text === '제출자 박태순  (서명 또는 인)') {
+      if (text === '제출자 최가명  (서명 또는 인)') {
         return [
           {
             entity_group: 'private_person',
             start: 0,
             end: text.length,
             score: 0.99,
-            word: ' 박태순  (서명 또는 인)',
+            word: ' 최가명  (서명 또는 인)',
           },
         ];
       }

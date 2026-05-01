@@ -8,6 +8,7 @@ import {
   type StructuredLine,
 } from '@/core/spanMap';
 import { buildContextualNerMaps } from '@/core/nerContext';
+import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { useNerModel } from './useNerModel';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 
@@ -65,8 +66,14 @@ export function useNerDetect(pageCount: number, currentPage: number): void {
             ms: elapsedMs(textStartedAt),
           });
           const classifyStartedAt = performance.now();
-          const ents = await traceStage(p, 'classify', nerWorker.classify(map.pageText), isStaleJob);
+          const rawEnts = await traceStage(
+            p,
+            'classify',
+            nerWorker.classify(map.pageText),
+            isStaleJob,
+          );
           if (isStaleJob()) return;
+          const ents = filterNerEntitiesForText(map.pageText, rawEnts);
           console.info(`[useNerDetect] page ${p} classify 완료`, {
             entities: ents.length,
             ms: elapsedMs(classifyStartedAt),
@@ -129,13 +136,14 @@ async function classifyContextualMaps(
   const startedAt = performance.now();
   for (const map of maps) {
     if (isStaleJob()) return [];
-    const ents = await traceStage(
+    const rawEnts = await traceStage(
       pageIndex,
       '문맥 classify',
       nerWorker.classify(map.pageText),
       isStaleJob,
     );
     if (isStaleJob()) return [];
+    const ents = filterNerEntitiesForText(map.pageText, rawEnts);
     entityCount += ents.length;
     boxes.push(
       ...entitiesToBoxes(

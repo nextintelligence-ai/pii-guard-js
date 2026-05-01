@@ -72,7 +72,7 @@ describe('OCR 탐지 플로우', () => {
         {
           id: 'line-1',
           pageIndex: 0,
-          text: '주민번호 801129-1234567',
+          text: '주민번호 000000-0000001',
           score: 0.93,
           poly: [
             { x: 0, y: 0 },
@@ -145,8 +145,8 @@ describe('OCR 탐지 플로우', () => {
         lines: 1,
         candidates: 1,
         renderScale: 2,
-        textLines: ['주민번호 801129-1234567'],
-        text: '주민번호 801129-1234567',
+        textLines: ['주민번호 000000-0000001'],
+        text: '주민번호 000000-0000001',
       }),
     );
   });
@@ -261,7 +261,7 @@ describe('OCR 탐지 플로우', () => {
     expect(state.boxes[candidate!.id]).toMatchObject({
       source: 'ocr-ner',
       category: 'private_person',
-      enabled: false,
+      enabled: true,
     });
     expect(state.boxes[candidate!.id]?.bbox[0]).toBeGreaterThan(0);
   });

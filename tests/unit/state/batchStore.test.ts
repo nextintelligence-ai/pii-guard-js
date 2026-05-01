@@ -43,10 +43,10 @@ describe('BatchStore', () => {
     });
   });
 
-  it('batch 설정 기본값은 OCR 사용, NER 자동 적용 OFF 다', () => {
+  it('batch 설정 기본값은 OCR 사용, NER 자동 적용 ON 이다', () => {
     expect(useBatchStore.getState().settings).toEqual({
       useOcr: true,
-      autoApplyNer: false,
+      autoApplyNer: true,
     });
   });
 });

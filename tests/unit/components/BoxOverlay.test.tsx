@@ -60,7 +60,7 @@ describe('BoxOverlay', () => {
         id: 'ocr-rrn-1',
         pageIndex: 0,
         bbox: [10, 20, 40, 30],
-        text: '801129-1031511',
+        text: '000000-0000001',
         category: 'rrn',
         confidence: 1,
         source: 'ocr',

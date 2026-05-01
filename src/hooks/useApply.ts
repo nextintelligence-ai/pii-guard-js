@@ -11,6 +11,9 @@ export async function applyCurrentDocument(): Promise<{
   sourceFileName: string;
 }> {
   const s = useAppStore.getState();
+  if (s.nerProgress.total > 0 && s.nerProgress.done < s.nerProgress.total) {
+    throw new Error('NER 분석이 아직 진행 중입니다');
+  }
   const enabled = Object.values(s.boxes).filter((b) => b.enabled);
   if (enabled.length === 0) {
     throw new Error('적용할 박스가 없습니다');
@@ -29,6 +32,10 @@ export async function applyCurrentDocument(): Promise<{
 export function useApply() {
   const apply = useCallback(async () => {
     const s = useAppStore.getState();
+    if (s.nerProgress.total > 0 && s.nerProgress.done < s.nerProgress.total) {
+      toast.error('NER 분석이 끝난 뒤 익명화를 적용해 주세요');
+      return;
+    }
     const enabled = Object.values(s.boxes).filter((b) => b.enabled);
     if (enabled.length === 0) {
       toast.error('적용할 박스가 없습니다');

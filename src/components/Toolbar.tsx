@@ -36,10 +36,12 @@ export function Toolbar({
   showApply = true,
 }: Props) {
   const docKind = useAppStore((s) => s.doc.kind);
+  const nerProgress = useAppStore((s) => s.nerProgress);
   const currentPage = useAppStore((s) => s.currentPage);
   const requestOcrPage = useAppStore((s) => s.requestOcrPage);
   const requestOcrAll = useAppStore((s) => s.requestOcrAll);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isNerRunning = nerProgress.total > 0 && nerProgress.done < nerProgress.total;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -149,7 +151,7 @@ export function Toolbar({
             size="sm"
             variant="destructive"
             onClick={onApply}
-            disabled={docKind !== 'ready'}
+            disabled={docKind !== 'ready' || isNerRunning}
           >
             <Shield />
             익명화 적용

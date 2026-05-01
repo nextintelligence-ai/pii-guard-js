@@ -93,4 +93,30 @@ describe('Toolbar', () => {
     expect(container.querySelector('button[aria-label="현재 페이지 OCR"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="전체 문서 OCR"]')).not.toBeNull();
   });
+
+  it('NER 분석이 진행 중이면 익명화 적용을 비활성화한다', async () => {
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'sample.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+    useAppStore.getState().setNerProgress({ done: 0, total: 1 });
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <Toolbar
+          onLoad={() => undefined}
+          onApply={() => undefined}
+          onHelp={() => undefined}
+        />,
+      );
+    });
+
+    const applyButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('익명화 적용'),
+    );
+    expect(applyButton?.disabled).toBe(true);
+  });
 });

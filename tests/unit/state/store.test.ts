@@ -48,7 +48,7 @@ describe('AppStore', () => {
     expect(useAppStore.getState().focusNonce).toBe(firstNonce + 1);
   });
 
-  it('NER 후보는 score 가 낮아도 보존하고 박스는 기본 OFF 로 만든다', () => {
+  it('사람 이름 NER 후보는 score 가 낮아도 보존하고 threshold 이상 박스만 기본 ON 으로 만든다', () => {
     const s = useAppStore.getState();
     s.setNerThreshold(0.9);
     s.addNerCandidates(0, [
@@ -58,21 +58,22 @@ describe('AppStore', () => {
 
     const state = useAppStore.getState();
     expect(state.candidates.filter((c) => c.source === 'ner')).toHaveLength(2);
-    const boxes = Object.values(state.boxes);
+    const boxes = Object.values(state.boxes).sort((a, b) => a.bbox[0] - b.bbox[0]);
     expect(boxes).toHaveLength(2);
     expect(boxes.every((b) => b.source === 'ner')).toBe(true);
-    expect(boxes.every((b) => b.enabled === false)).toBe(true);
+    expect(boxes[0]?.enabled).toBe(false);
+    expect(boxes[1]?.enabled).toBe(true);
   });
 
-  it('NER 카테고리를 켜면 해당 NER 박스가 enabled 된다', () => {
+  it('기본 OFF 인 NER 카테고리를 켜면 해당 NER 박스가 enabled 된다', () => {
     const s = useAppStore.getState();
     s.addNerCandidates(0, [
-      { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.99 },
+      { category: 'private_address', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.99 },
     ]);
     const id = Object.keys(useAppStore.getState().boxes)[0]!;
     expect(useAppStore.getState().boxes[id]?.enabled).toBe(false);
 
-    s.toggleCategory('private_person');
+    s.toggleCategory('private_address');
 
     expect(useAppStore.getState().boxes[id]?.enabled).toBe(true);
   });
@@ -85,8 +86,6 @@ describe('AppStore', () => {
       { category: 'private_person', bbox: { x: 20, y: 0, w: 10, h: 10 }, score: 0.95 },
     ]);
 
-    s.toggleCategory('private_person');
-
     const boxes = Object.values(useAppStore.getState().boxes).sort((a, b) => a.bbox[0] - b.bbox[0]);
     expect(boxes[0]?.enabled).toBe(false);
     expect(boxes[1]?.enabled).toBe(true);
@@ -98,7 +97,6 @@ describe('AppStore', () => {
       { category: 'private_person', bbox: { x: 0, y: 0, w: 10, h: 10 }, score: 0.8 },
       { category: 'private_person', bbox: { x: 20, y: 0, w: 10, h: 10 }, score: 0.95 },
     ]);
-    s.toggleCategory('private_person');
 
     s.setNerThreshold(0.9);
 
@@ -114,7 +112,7 @@ describe('AppStore', () => {
         id: 'ocr-rrn-1',
         pageIndex: 0,
         bbox: [10, 20, 80, 34],
-        text: '801129-1234567',
+        text: '000000-0000001',
         category: 'rrn',
         confidence: 0.91,
         source: 'ocr',

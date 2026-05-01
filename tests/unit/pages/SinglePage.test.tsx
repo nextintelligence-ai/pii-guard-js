@@ -79,6 +79,26 @@ describe('SinglePage', () => {
     expect(mocks.useOcrDetect).toHaveBeenCalledWith({ auto: false });
   });
 
+  it('일반 단일 처리 진입 시 기존 작업 상태를 초기화한다', async () => {
+    useAppStore.setState({
+      doc: {
+        kind: 'ready',
+        fileName: 'stale.pdf',
+        pages: [{ index: 0, widthPt: 595, heightPt: 842, rotation: 0 }],
+      },
+    });
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SinglePage />);
+    });
+
+    expect(useAppStore.getState().doc.kind).toBe('empty');
+    expect(container.textContent).not.toContain('stale.pdf');
+    expect(container.textContent).toContain('아직 검사할 PDF가 없습니다');
+  });
+
   it('ready 상태에서는 후보 패널에 높이 제약을 전달한다', async () => {
     useAppStore.setState({
       doc: {
@@ -91,7 +111,7 @@ describe('SinglePage', () => {
     root = createRoot(container);
 
     await act(async () => {
-      root?.render(<SinglePage autoDetect={false} />);
+      root?.render(<SinglePage embedded autoDetect={false} />);
     });
 
     const sidebarBody = container.querySelector('[data-testid="single-sidebar-body"]');

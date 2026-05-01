@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { ScanSearch, Loader2 } from 'lucide-react';
 import { ApplyResultDialog } from '@/components/ApplyResultDialog';
 import { CandidatePanel } from '@/components/CandidatePanel';
@@ -29,6 +29,14 @@ type Props = {
 };
 
 export function SinglePage({ embedded = false, autoDetect = true, autoOcr = false }: Props) {
+  const initializedRouteEntry = useRef(false);
+  useLayoutEffect(() => {
+    if (embedded) return;
+    if (initializedRouteEntry.current) return;
+    initializedRouteEntry.current = true;
+    useAppStore.getState().reset();
+  }, [embedded]);
+
   useKeyboard();
   useAutoDetect(autoDetect);
   useOcrDetect({ auto: autoOcr });

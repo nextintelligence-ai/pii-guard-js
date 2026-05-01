@@ -38,6 +38,14 @@ const NON_NAME_WORDS = new Set([
   '연구원',
   '주임',
   '인턴',
+  '관계',
+  '코드',
+  '자료',
+  '구분',
+  '국세청',
+  '기타',
+  '국세청계',
+  '기타계',
 ]);
 
 /**
@@ -65,14 +73,69 @@ export function buildContextualNerMaps(lines: StructuredLine[]): PageMap[] {
     }
   }
 
+  const deductionTableMap = buildDeductionTableNameMap(sourceLines);
+  if (deductionTableMap) maps.push(deductionTableMap);
+
   const splitNameMap = buildSplitNameLabelMap(sourceLines);
   if (splitNameMap) maps.push(splitNameMap);
+
+  const identityTableMaps = buildIdentityTableNameMaps(sourceLines);
+  maps.push(...identityTableMaps);
 
   const nextLineNameMaps = buildNextLineNameLabelMaps(sourceLines);
   maps.push(...nextLineNameMaps);
 
   const signatureNameMaps = buildSignatureNameMaps(sourceLines);
   maps.push(...signatureNameMaps);
+
+  return maps;
+}
+
+function buildDeductionTableNameMap(lines: SourceLine[]): PageMap | null {
+  const headerIndex = lines.findIndex((line, index) => {
+    const trimmed = trimSourceLine(line);
+    return isNameLabelLine(trimmed.text) && hasDeductionTableHeaders(lines, index);
+  });
+  if (headerIndex < 0) return null;
+
+  const bodyStart = findDeductionTableBodyStart(lines, headerIndex);
+  const bodyEnd = findDeductionTableBodyEnd(lines, bodyStart);
+  const nameLines: SourceLine[] = [];
+
+  for (let i = bodyStart; i < bodyEnd; i += 1) {
+    const nameLine = trimSourceLine(lines[i]!);
+    if (!isLikelyNameContextLine(nameLine.text)) continue;
+    if (!hasDeductionPersonRowEvidence(lines, i, bodyEnd)) continue;
+    nameLines.push(nameLine);
+  }
+
+  if (nameLines.length === 0) return null;
+  return buildRepeatedNameLabelMap('성명: ', nameLines);
+}
+
+function buildIdentityTableNameMaps(lines: SourceLine[]): PageMap[] {
+  const maps: PageMap[] = [];
+
+  for (let i = 0; i < lines.length - 3; i += 1) {
+    const nameLabelLine = trimSourceLine(lines[i]!);
+    const residentLabelLine = trimSourceLine(lines[i + 1]!);
+    if (!isNameLabelLine(nameLabelLine.text)) continue;
+    if (!isResidentIdLabelLine(residentLabelLine.text)) continue;
+
+    const nameLine = trimSourceLine(lines[i + 2]!);
+    if (!isLikelyNameContextLine(nameLine.text)) continue;
+
+    const residentIdLine = trimSourceLine(lines[i + 3]!);
+    if (!isLikelyResidentIdContextLine(residentIdLine.text)) continue;
+
+    maps.push(
+      buildMapFromContextChars([
+        ...nameLabelLine.chars.map(toIgnoredContextChar),
+        ...syntheticIgnoredText(': ', nameLine),
+        ...nameLine.chars.map(toEmittedContextChar),
+      ]),
+    );
+  }
 
   return maps;
 }
@@ -88,10 +151,13 @@ function buildNextLineNameLabelMaps(lines: SourceLine[]): PageMap[] {
     if (!isLikelyNameContextLine(nameLine.text)) continue;
     if (!hasNextLineNameContext(lines, i)) continue;
 
+    const separator = isUserNameLabelLine(labelLine.text)
+      ? syntheticIgnoredText(': ', nameLine)
+      : [syntheticIgnoredSpace(nameLine)];
     maps.push(
       buildMapFromContextChars([
         ...labelLine.chars.map(toIgnoredContextChar),
-        syntheticIgnoredSpace(nameLine),
+        ...separator,
         ...nameLine.chars.map(toEmittedContextChar),
       ]),
     );
@@ -157,19 +223,27 @@ function hasCertificateNameContext(lines: SourceLine[], labelIndex: number): boo
 }
 
 function hasNextLineNameContext(lines: SourceLine[], labelIndex: number): boolean {
-  const nearbyAfter = lines
-    .slice(labelIndex + 2, Math.min(lines.length, labelIndex + 6))
+  const nearby = lines
+    .slice(Math.max(0, labelIndex - 4), Math.min(lines.length, labelIndex + 6))
     .map((line) => line.text.trim());
-  return nearbyAfter.some(isResidentIdLabelLine);
+  return nearby.some(isResidentIdLabelLine);
 }
 
 function isNameLabelLine(text: string): boolean {
   const compact = text.replace(/\s+/g, '');
-  return compact.endsWith('성명') || compact === '소득자성명';
+  return compact.endsWith('성명') || compact === '소득자성명' || isUserNameLabelLine(text);
+}
+
+function isUserNameLabelLine(text: string): boolean {
+  return text.replace(/\s+/g, '') === '사용자명';
 }
 
 function isResidentIdLabelLine(text: string): boolean {
   return text.replace(/\s+/g, '').includes('주민등록번호');
+}
+
+function isLikelyResidentIdContextLine(text: string): boolean {
+  return /^\d{6}-(?:\d{7}|\*{7})$/.test(text.trim());
 }
 
 function hasContactTableHeaders(lines: SourceLine[], headerIndex: number): boolean {
@@ -190,8 +264,56 @@ function findBodyStart(lines: SourceLine[], headerIndex: number): number {
 function isLikelyNameContextLine(text: string): boolean {
   const trimmed = text.trim();
   if (!/^[가-힣]{2,4}$/.test(trimmed)) return false;
-  if (TABLE_HEADERS.has(trimmed) || NON_NAME_WORDS.has(trimmed)) return false;
+  if (TABLE_HEADERS.has(trimmed) || NON_NAME_WORDS.has(trimmed.replace(/\s+/g, ''))) {
+    return false;
+  }
   return true;
+}
+
+function hasDeductionTableHeaders(lines: SourceLine[], headerIndex: number): boolean {
+  const before = lines
+    .slice(Math.max(0, headerIndex - 6), headerIndex)
+    .map((line) => line.text.trim());
+  const after = lines
+    .slice(headerIndex + 1, Math.min(lines.length, headerIndex + 24))
+    .map((line) => line.text.trim());
+
+  return (
+    before.includes('인적공제 항목') &&
+    before.includes('관계') &&
+    after.includes('주민등록번호') &&
+    after.includes('자료') &&
+    after.includes('구분')
+  );
+}
+
+function findDeductionTableBodyStart(lines: SourceLine[], headerIndex: number): number {
+  for (let i = headerIndex + 1; i < Math.min(lines.length, headerIndex + 120); i += 1) {
+    if (lines[i]!.text.trim() === '기타 계') return i + 1;
+  }
+  return headerIndex + 1;
+}
+
+function findDeductionTableBodyEnd(lines: SourceLine[], bodyStart: number): number {
+  for (let i = bodyStart; i < lines.length; i += 1) {
+    if (lines[i]!.text.trim() === '각종 소득·세액 공제 항목') return i;
+  }
+  return lines.length;
+}
+
+function hasDeductionPersonRowEvidence(
+  lines: SourceLine[],
+  nameIndex: number,
+  bodyEnd: number,
+): boolean {
+  const rowWindow = lines
+    .slice(nameIndex + 1, Math.min(bodyEnd, nameIndex + 24))
+    .map((line) => line.text.trim());
+  const hasSourceType = rowWindow.includes('국세청') || rowWindow.includes('기타');
+  const hasIdentityMarker =
+    rowWindow.some(isLikelyResidentIdContextLine) ||
+    rowWindow.some((text) => text.includes('근로자 본인'));
+  return hasSourceType && hasIdentityMarker;
 }
 
 function toSourceLine(line: StructuredLine): SourceLine {
@@ -246,6 +368,18 @@ function splitLeadingNameContextLine(
       chars: suffixChars,
     },
   };
+}
+
+function buildRepeatedNameLabelMap(labelText: string, nameLines: SourceLine[]): PageMap {
+  const chars: ContextChar[] = [];
+
+  nameLines.forEach((nameLine, index) => {
+    if (index > 0) chars.push(...syntheticIgnoredText('\n', nameLine));
+    chars.push(...syntheticIgnoredText(labelText, nameLine));
+    chars.push(...nameLine.chars.map(toEmittedContextChar));
+  });
+
+  return buildMapFromContextChars(chars);
 }
 
 function buildMapFromSourceLines(lines: SourceLine[]): PageMap {
@@ -307,12 +441,16 @@ function toEmittedContextChar(c: SourceChar): ContextChar {
 }
 
 function syntheticIgnoredSpace(anchor: SourceLine): ContextChar {
+  return syntheticIgnoredText(' ', anchor)[0]!;
+}
+
+function syntheticIgnoredText(text: string, anchor: SourceLine): ContextChar[] {
   const first = anchor.chars[0];
-  return {
-    ch: ' ',
+  return [...text].map((ch) => ({
+    ch,
     bbox: first?.bbox ?? { x: 0, y: 0, w: 0, h: 0 },
     lineId: anchor.id,
     spanId: -1,
     emitBox: false,
-  };
+  }));
 }

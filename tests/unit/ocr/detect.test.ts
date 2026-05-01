@@ -10,7 +10,7 @@ describe('detectOcrCandidates', () => {
         {
           id: 'line-1',
           pageIndex: 0,
-          text: '주민번호 801129-1234567',
+          text: '주민번호 000000-0000001',
           score: 0.95,
           poly: [
             { x: 0, y: 0 },
@@ -25,7 +25,7 @@ describe('detectOcrCandidates', () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       pageIndex: 0,
-      text: '801129-1234567',
+      text: '000000-0000001',
       category: 'rrn',
       source: 'ocr',
     });

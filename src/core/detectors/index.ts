@@ -5,6 +5,7 @@ import { addressRule } from './address';
 import { businessNoRule } from './businessNo';
 import { cardRule } from './card';
 import { emailRule } from './email';
+import { detectDeductionTableNames } from './deductionTableName';
 import { phoneRule } from './phone';
 import { rrnRule } from './rrn';
 import type { DetectorRule, LineForScan } from './types';
@@ -46,5 +47,6 @@ export function runDetectors(
       }
     }
   }
+  out.push(...detectDeductionTableNames(lines, source));
   return out;
 }
