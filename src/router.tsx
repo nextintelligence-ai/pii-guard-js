@@ -1,12 +1,13 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from '@tanstack/react-router';
 import { AppShell } from '@/AppShell';
+import { SinglePage } from '@/pages/SinglePage';
 
 function HomePlaceholder() {
   return <div>홈</div>;
-}
-
-function SinglePlaceholder() {
-  return <div>단일 처리</div>;
 }
 
 function BatchPlaceholder() {
@@ -30,7 +31,7 @@ const indexRoute = createRoute({
 const singleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/single',
-  component: SinglePlaceholder,
+  component: SinglePage,
 });
 
 const batchRoute = createRoute({
