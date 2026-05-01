@@ -1,18 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '@/state/store';
+import {
+  calculatePdfPreviewFitScale,
+  DEFAULT_PDF_PREVIEW_SCALE,
+} from '@/utils/pdfPreviewFit';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 
-export function useCanvasPainter(canvas: HTMLCanvasElement | null) {
+type PreviewViewport = {
+  widthPx: number;
+  heightPx: number;
+} | null;
+
+export function useCanvasPainter(canvas: HTMLCanvasElement | null, viewport: PreviewViewport) {
   const doc = useAppStore((s) => s.doc);
   const page = useAppStore((s) => s.currentPage);
-  const [scale, setScale] = useState(1.5);
+  const pageMeta = doc.kind === 'ready' ? doc.pages[page] : null;
+  const scale = pageMeta
+    ? calculatePdfPreviewFitScale({
+        pageWidthPt: pageMeta.widthPt,
+        pageHeightPt: pageMeta.heightPt,
+        viewportWidthPx: viewport?.widthPx ?? 0,
+        viewportHeightPx: viewport?.heightPx ?? 0,
+      })
+    : DEFAULT_PDF_PREVIEW_SCALE;
   const [meta, setMeta] = useState<{ widthPx: number; heightPx: number; scale: number } | null>(
     null,
   );
   const lastJob = useRef(0);
 
   useEffect(() => {
-    if (!canvas || doc.kind !== 'ready') return;
+    if (!canvas || !pageMeta) return;
     const job = ++lastJob.current;
     void (async () => {
       const api = await getPdfWorker();
@@ -27,7 +44,7 @@ export function useCanvasPainter(canvas: HTMLCanvasElement | null) {
       r.bitmap.close();
       setMeta({ widthPx: r.widthPx, heightPx: r.heightPx, scale: r.scale });
     })();
-  }, [canvas, doc, page, scale]);
+  }, [canvas, page, pageMeta, scale]);
 
-  return { scale, setScale, meta };
+  return { meta };
 }

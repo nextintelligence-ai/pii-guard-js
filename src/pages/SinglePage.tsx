@@ -143,7 +143,10 @@ export function SinglePage({ embedded = false, autoDetect = true, autoOcr = fals
             )
           ) : doc.kind === 'ready' ? (
             <>
-              <div className="max-h-[calc(100vh-180px)] w-full overflow-auto">
+              <div
+                data-testid="single-pdf-preview"
+                className="flex h-[calc(100vh-180px)] min-h-0 w-full items-center justify-center overflow-hidden"
+              >
                 <PdfCanvas />
               </div>
               <PageNavigator />

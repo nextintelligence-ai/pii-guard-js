@@ -123,4 +123,25 @@ describe('SinglePage', () => {
     expect(candidateSlot?.className).toContain('min-h-0');
     expect(candidateSlot?.className).toContain('flex-1');
   });
+
+  it('ready 상태 PDF preview 는 fit-width 와 fit-height 대상 크기를 가진다', async () => {
+    useAppStore.setState({
+      doc: {
+        kind: 'ready',
+        fileName: 'sample.pdf',
+        pages: [{ index: 0, widthPt: 595, heightPt: 842, rotation: 0 }],
+      },
+    });
+    const container = document.createElement('div');
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SinglePage embedded autoDetect={false} />);
+    });
+
+    const preview = container.querySelector('[data-testid="single-pdf-preview"]');
+    expect(preview).not.toBeNull();
+    expect(preview?.className).toContain('h-[calc(100vh-180px)]');
+    expect(preview?.className).toContain('overflow-hidden');
+  });
 });
