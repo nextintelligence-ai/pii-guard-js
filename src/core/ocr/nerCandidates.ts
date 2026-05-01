@@ -18,7 +18,7 @@ export function filterOcrNerBoxes(input: {
   primaryCandidates: Candidate[];
 }): NerBox[] {
   const filtered = input.boxes.filter((box) => {
-    if (!isSupportedOcrNerCategory(box.category)) return false;
+    if (!isSupportedOcrNerBox(box)) return false;
     if (!hasUsableGeometry(box)) return false;
     return !input.primaryCandidates.some((candidate) =>
       isDuplicatePrimaryCandidate(input.pageIndex, box, candidate),
@@ -34,7 +34,7 @@ export function nerBoxesToCandidates(
   source: CandidateSource,
 ): Candidate[] {
   return boxes.flatMap((box) => {
-    if (!isSupportedOcrNerCategory(box.category) || !hasUsableGeometry(box)) return [];
+    if (!isSupportedOcrNerBox(box) || !hasUsableGeometry(box)) return [];
     const { x, y, w, h } = box.bbox;
     return [
       {
@@ -48,6 +48,10 @@ export function nerBoxesToCandidates(
       },
     ];
   });
+}
+
+function isSupportedOcrNerBox(box: NerBox): box is NerBox & { category: SupportedOcrNerCategory } {
+  return isSupportedOcrNerCategory(box.category);
 }
 
 function isSupportedOcrNerCategory(category: string): category is SupportedOcrNerCategory {
