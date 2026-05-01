@@ -19,4 +19,14 @@ if (jsdomWindow) {
       get: () => jsdomWindow.sessionStorage,
     },
   });
+
+  Object.defineProperty(jsdomWindow, 'scrollTo', {
+    configurable: true,
+    value: () => undefined,
+  });
 }
+
+Object.defineProperty(globalThis, 'scrollTo', {
+  configurable: true,
+  value: () => undefined,
+});

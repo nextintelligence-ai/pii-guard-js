@@ -1,13 +1,5 @@
-import {
-  Outlet,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from '@tanstack/react-router';
-
-function RootPlaceholder() {
-  return <Outlet />;
-}
+import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router';
+import { AppShell } from '@/AppShell';
 
 function HomePlaceholder() {
   return <div>홈</div>;
@@ -26,7 +18,7 @@ function BatchJobPlaceholder() {
 }
 
 const rootRoute = createRootRoute({
-  component: RootPlaceholder,
+  component: AppShell,
 });
 
 const indexRoute = createRoute({
