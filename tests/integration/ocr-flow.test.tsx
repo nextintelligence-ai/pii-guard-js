@@ -167,6 +167,90 @@ describe('OCR 탐지 플로우', () => {
     );
   });
 
+  it('OCR worker 콘솔이 보이지 않아도 메인 스레드에 회전 진단을 남긴다', async () => {
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-1',
+          pageIndex: 0,
+          text: '고객명 홍길동',
+          score: 0.93,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+      runtime: {
+        requestedBackend: 'auto',
+        rotationApplied: 90,
+        rotationDiagnostics: {
+          pageIndex: 0,
+          selectedRotation: 90,
+          reason: 'rotated-selected-after-rotation-probe',
+          probeReasons: ['noisy-text'],
+          candidates: [
+            {
+              rotation: 0,
+              shortLineRatio: 0.625,
+              symbolRatio: 0.3768,
+              textQualityScore: 0.3721,
+            },
+            {
+              rotation: 90,
+              shortLineRatio: 0,
+              symbolRatio: 0.0714,
+              textQualityScore: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().ocrProgress.byPage[0]?.status === 'done');
+
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[useOcrDetect] OCR 회전 진단',
+      expect.objectContaining({
+        page: 1,
+        pageIndex: 0,
+        rotationApplied: 90,
+        hasDiagnostics: true,
+        diagnostics: expect.objectContaining({
+          selectedRotation: 90,
+          probeReasons: ['noisy-text'],
+        }),
+      }),
+    );
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[useOcrDetect] OCR 성공',
+      expect.objectContaining({
+        rotationDiagnostics: expect.objectContaining({
+          selectedRotation: 90,
+        }),
+      }),
+    );
+  });
+
   it('auto 옵션이 꺼져 있으면 화면 진입만으로 OCR 대상을 검사하지 않는다', async () => {
     function Probe() {
       useOcrDetect({ auto: false });

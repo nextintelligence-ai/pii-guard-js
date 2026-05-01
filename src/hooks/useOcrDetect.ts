@@ -154,6 +154,10 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
           });
           state.addOcrCandidates(candidates, [pageIndex]);
           state.addOcrNerCandidates(pageIndex, ocrNerBoxes);
+          logOcrRotationDiagnostics({
+            pageIndex,
+            runtime: result.runtime,
+          });
           logOcrSuccess({
             pageIndex,
             lines: result.lines.length,
@@ -256,6 +260,8 @@ function logOcrSuccess(details: {
   recovered?: boolean;
   reason?: string;
 }): void {
+  const rotationApplied = getOcrRuntimeNumber(details.runtime, 'rotationApplied');
+  const rotationDiagnostics = getOcrRuntimeValue(details.runtime, 'rotationDiagnostics');
   const payload: Record<string, unknown> = {
     page: details.pageIndex + 1,
     pageIndex: details.pageIndex,
@@ -269,10 +275,51 @@ function logOcrSuccess(details: {
     payload.text = details.textLines.join('\n');
   }
   if (details.runtime !== undefined) payload.runtime = details.runtime;
+  if (rotationApplied !== undefined) payload.rotationApplied = rotationApplied;
+  if (rotationDiagnostics !== undefined) {
+    payload.rotationDiagnostics = rotationDiagnostics;
+  } else if (isRecord(details.runtime) && 'rotationApplied' in details.runtime) {
+    payload.rotationDiagnosticsMissing = true;
+  }
   if (details.metrics !== undefined) payload.metrics = details.metrics;
   if (details.recovered !== undefined) payload.recovered = details.recovered;
   if (details.reason !== undefined) payload.reason = details.reason;
   console.info('[useOcrDetect] OCR 성공', payload);
+}
+
+function logOcrRotationDiagnostics(details: {
+  pageIndex: number;
+  runtime?: unknown;
+}): void {
+  const runtimeKeys = isRecord(details.runtime)
+    ? Object.keys(details.runtime).sort()
+    : [];
+  const rotationApplied = getOcrRuntimeNumber(details.runtime, 'rotationApplied');
+  const diagnostics = getOcrRuntimeValue(details.runtime, 'rotationDiagnostics');
+
+  console.info('[useOcrDetect] OCR 회전 진단', {
+    page: details.pageIndex + 1,
+    pageIndex: details.pageIndex,
+    hasRuntime: details.runtime !== undefined,
+    runtimeKeys,
+    rotationApplied,
+    hasDiagnostics: diagnostics !== undefined,
+    diagnostics: diagnostics ?? null,
+  });
+}
+
+function getOcrRuntimeNumber(runtime: unknown, key: string): number | undefined {
+  const value = getOcrRuntimeValue(runtime, key);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getOcrRuntimeValue(runtime: unknown, key: string): unknown {
+  if (!isRecord(runtime)) return undefined;
+  return runtime[key];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function logOcrFailure(details: { pageIndex: number; message: string }): void {
