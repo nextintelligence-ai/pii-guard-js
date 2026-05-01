@@ -3,12 +3,13 @@ import { useAppStore } from '@/state/store';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 import type { Candidate, RedactionBox } from '@/types/domain';
 
-export function useAutoDetect() {
+export function useAutoDetect(enabled = true) {
   const doc = useAppStore((s) => s.doc);
   const docEpoch = useAppStore((s) => s.docEpoch);
   const page = useAppStore((s) => s.currentPage);
 
   useEffect(() => {
+    if (!enabled) return;
     if (doc.kind !== 'ready') return;
     let cancelled = false;
     const isStaleJob = (): boolean =>
@@ -59,7 +60,7 @@ export function useAutoDetect() {
     return () => {
       cancelled = true;
     };
-  }, [doc, docEpoch, page]);
+  }, [doc, docEpoch, enabled, page]);
 }
 
 async function detectAllWithRetry(

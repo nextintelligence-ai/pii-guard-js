@@ -151,6 +151,57 @@ describe('OCR 탐지 플로우', () => {
     );
   });
 
+  it('auto 옵션이 꺼져 있으면 화면 진입만으로 OCR 대상을 검사하지 않는다', async () => {
+    function Probe() {
+      useOcrDetect({ auto: false });
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(fakePdfWorker.inspectPageContent).not.toHaveBeenCalled();
+    expect(fakePdfWorker.renderPagePng).not.toHaveBeenCalled();
+    expect(getOcrWorker).not.toHaveBeenCalled();
+    expect(useAppStore.getState().candidates).toEqual([]);
+  });
+
+  it('auto 옵션이 꺼져 있어도 현재 페이지 OCR 요청은 실행한다', async () => {
+    function Probe() {
+      useOcrDetect({ auto: false });
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+    await act(async () => {
+      useAppStore.getState().requestOcrPage(0);
+    });
+
+    await waitForStore(() => useAppStore.getState().candidates.some((c) => c.source === 'ocr'));
+
+    expect(fakePdfWorker.inspectPageContent).not.toHaveBeenCalled();
+    expect(fakePdfWorker.renderPagePng).toHaveBeenCalledWith(0, 2);
+    expect(useAppStore.getState().ocrRequest).toEqual({ kind: 'idle' });
+  });
+
   it('OCR 텍스트도 NER 로 분석해 비정형 PII 후보를 저장한다', async () => {
     fakeOcrWorker.recognizePng.mockResolvedValue({
       lines: [

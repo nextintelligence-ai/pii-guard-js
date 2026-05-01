@@ -1,6 +1,9 @@
+import { lazy, Suspense } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useBatchStore } from '@/state/batchStore';
+
+const NerLoadButton = lazy(() => import('@/components/NerLoadButton'));
 
 export function BatchSettings() {
   const settings = useBatchStore((s) => s.settings);
@@ -24,6 +27,9 @@ export function BatchSettings() {
         />
         <Label htmlFor="batch-auto-ner">NER 후보도 자동 적용</Label>
       </div>
+      <Suspense fallback={null}>
+        <NerLoadButton />
+      </Suspense>
     </div>
   );
 }

@@ -11,7 +11,12 @@ import type { NerBox } from '@/core/spanMap';
 
 const OCR_RENDER_SCALE = 2;
 
-export function useOcrDetect(): void {
+type OcrDetectOptions = {
+  auto?: boolean;
+};
+
+export function useOcrDetect(options: OcrDetectOptions = {}): void {
+  const auto = options.auto ?? true;
   const doc = useAppStore((s) => s.doc);
   const docEpoch = useAppStore((s) => s.docEpoch);
   const currentPage = useAppStore((s) => s.currentPage);
@@ -63,9 +68,10 @@ export function useOcrDetect(): void {
           continue;
         }
         if (alreadyHasOcr) {
-          if (canRunNer && !alreadyHasOcrNer) targets.push(page.index);
+          if (auto && canRunNer && !alreadyHasOcrNer) targets.push(page.index);
           continue;
         }
+        if (!auto) continue;
         const profile = await pdf.inspectPageContent(page.index);
         if (profile.shouldAutoOcr) targets.push(profile.pageIndex);
       }
@@ -174,7 +180,7 @@ export function useOcrDetect(): void {
     return () => {
       cancelled = true;
     };
-  }, [doc, docEpoch, currentPage, ocrRequest, nerState, nerWorker]);
+  }, [auto, doc, docEpoch, currentPage, ocrRequest, nerState, nerWorker]);
 }
 
 async function detectOcrNerBoxes(

@@ -152,4 +152,35 @@ describe('runBatchJob', () => {
       expect.objectContaining({ id: 'ocr-1' }),
     ]);
   });
+
+  it('주입된 NER 후보를 batch 후보와 자동 적용 대상에 포함한다', async () => {
+    const nerCandidate: Candidate = {
+      ...candidate,
+      id: 'ner-1',
+      source: 'ner',
+      text: 'Alice Smith',
+      category: 'private_person',
+      confidence: 0.95,
+    };
+    const pdf = createPdfFake({
+      detectAll: vi.fn().mockResolvedValue([]),
+    });
+    const nerDetectPage = vi.fn().mockResolvedValue([nerCandidate]);
+
+    const result = await runBatchJob({
+      file: new File(['pdf'], 'ner.pdf', { type: 'application/pdf' }),
+      settings: { useOcr: false, autoApplyNer: true },
+      pdf,
+      nerDetectPage,
+    });
+
+    expect(nerDetectPage).toHaveBeenCalledWith(0);
+    expect(pdf.apply).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'ner-1', source: 'ner', enabled: true }),
+    ]);
+    expect(result).toMatchObject({
+      candidateCount: 1,
+      candidates: [expect.objectContaining({ id: 'ner-1', source: 'ner' })],
+    });
+  });
 });

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BatchReviewDialog } from '@/components/batch/BatchReviewDialog';
 import { useBatchStore } from '@/state/batchStore';
 import { useAppStore } from '@/state/store';
+import type { Candidate } from '@/types/domain';
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(),
@@ -135,5 +136,58 @@ describe('BatchReviewDialog', () => {
     });
 
     expect(mocks.applyCurrentDocument).not.toHaveBeenCalled();
+  });
+
+  it('loads stored batch candidates into the embedded review editor', async () => {
+    const file = new File(['pdf'], 'claim-c.pdf', { type: 'application/pdf' });
+    const candidate: Candidate = {
+      id: 'auto-batch-1',
+      pageIndex: 1,
+      bbox: [10, 20, 30, 40],
+      text: '010-1234-5678',
+      category: 'phone',
+      confidence: 1,
+      source: 'auto',
+    };
+    useBatchStore.getState().addFiles([file]);
+    const jobId = useBatchStore.getState().jobs[0]!.id;
+    useBatchStore.getState().updateJob(jobId, {
+      candidateCount: 1,
+      candidates: [candidate],
+    });
+    mocks.load.mockImplementationOnce(async (_file, options) => {
+      useAppStore.getState().setDoc({
+        kind: 'ready',
+        fileName: 'claim-c.pdf',
+        sourceId: jobId,
+        pages: [
+          { index: 0, widthPt: 100, heightPt: 100, rotation: 0 },
+          { index: 1, widthPt: 100, heightPt: 100, rotation: 0 },
+        ],
+      });
+      expect(options.shouldCommit()).toBe(true);
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <BatchReviewDialog jobId={jobId} open onOpenChange={() => undefined} />,
+      );
+      await Promise.resolve();
+    });
+
+    const state = useAppStore.getState();
+    expect(state.candidates).toEqual([candidate]);
+    expect(state.boxes['auto-batch-1']).toMatchObject({
+      id: 'auto-batch-1',
+      pageIndex: 1,
+      bbox: [10, 20, 30, 40],
+      source: 'auto',
+      category: 'phone',
+      enabled: true,
+    });
+    expect(state.currentPage).toBe(1);
   });
 });

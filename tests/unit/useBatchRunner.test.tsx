@@ -6,12 +6,30 @@ import { useBatchStore } from '@/state/batchStore';
 import { runBatchJob } from '@/core/batch/runBatchJob';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 
+const { fakeNerWorker } = vi.hoisted(() => ({
+  fakeNerWorker: {
+    classify: vi.fn(),
+    load: vi.fn(),
+    unload: vi.fn(),
+  },
+}));
+
 vi.mock('@/workers/pdfWorkerClient', () => ({
   getPdfWorker: vi.fn(),
 }));
 
 vi.mock('@/core/batch/runBatchJob', () => ({
   runBatchJob: vi.fn(),
+}));
+
+vi.mock('@/hooks/useNerModel', () => ({
+  useNerModel: () => ({
+    state: 'ready',
+    meta: null,
+    worker: fakeNerWorker,
+    loadFromUserDir: vi.fn(),
+    reset: vi.fn(),
+  }),
 }));
 
 async function waitFor(predicate: () => boolean): Promise<void> {
@@ -54,6 +72,7 @@ describe('useBatchRunner', () => {
     vi.mocked(runBatchJob)
       .mockResolvedValueOnce({
         status: 'failed',
+        candidates: [],
         candidateCount: 0,
         enabledBoxCount: 0,
         report: null,
@@ -63,6 +82,7 @@ describe('useBatchRunner', () => {
       })
       .mockResolvedValueOnce({
         status: 'done',
+        candidates: [],
         candidateCount: 1,
         enabledBoxCount: 1,
         report: null,
@@ -85,11 +105,11 @@ describe('useBatchRunner', () => {
 
     expect(runBatchJob).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ file: first }),
+      expect.objectContaining({ file: first, nerDetectPage: expect.any(Function) }),
     );
     expect(runBatchJob).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ file: second }),
+      expect.objectContaining({ file: second, nerDetectPage: expect.any(Function) }),
     );
     expect(useBatchStore.getState().jobs.map((job) => job.status)).toEqual([
       'failed',

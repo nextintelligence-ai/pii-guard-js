@@ -11,6 +11,7 @@ function createJob(patch: Partial<BatchJob> = {}): BatchJob {
     file,
     fileName: file.name,
     status: 'queued',
+    candidates: [],
     candidateCount: 0,
     enabledBoxCount: 0,
     report: null,

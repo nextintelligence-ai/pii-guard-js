@@ -14,6 +14,7 @@ import { applyCurrentDocument } from '@/hooks/useApply';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAppStore } from '@/state/store';
 import { useBatchStore } from '@/state/batchStore';
+import type { Candidate, RedactionBox } from '@/types/domain';
 import type { BatchJobStatus } from '@/state/batchStore';
 
 type Props = {
@@ -70,6 +71,7 @@ export function BatchReviewDialog({ jobId, open, onOpenChange }: Props) {
         currentDoc.kind === 'ready' &&
         currentDoc.sourceId === job.id
       ) {
+        hydrateBatchCandidates(job.candidates);
         setReadyJobId(job.id);
       }
     })();
@@ -88,6 +90,7 @@ export function BatchReviewDialog({ jobId, open, onOpenChange }: Props) {
       const { blob, report } = await applyCurrentDocument();
       updateJob(job.id, {
         status: report.postCheckLeaks > 0 ? 'warning' : 'done',
+        candidates: useAppStore.getState().candidates,
         candidateCount: useAppStore.getState().candidates.length,
         enabledBoxCount: Object.values(useAppStore.getState().boxes).filter(
           (box) => box.enabled,
@@ -135,7 +138,7 @@ export function BatchReviewDialog({ jobId, open, onOpenChange }: Props) {
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {job ? (
-            <SinglePage embedded />
+            <SinglePage embedded autoDetect={job.candidates.length === 0} />
           ) : (
             <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
               해당 batch 파일을 찾을 수 없습니다.
@@ -145,4 +148,40 @@ export function BatchReviewDialog({ jobId, open, onOpenChange }: Props) {
       </DialogContent>
     </Dialog>
   );
+}
+
+function hydrateBatchCandidates(candidates: Candidate[]): void {
+  if (candidates.length === 0) return;
+
+  const state = useAppStore.getState();
+  const boxes: Record<string, RedactionBox> = {};
+  for (const candidate of candidates) {
+    boxes[candidate.id] = {
+      id: candidate.id,
+      pageIndex: candidate.pageIndex,
+      bbox: candidate.bbox,
+      source: candidate.source,
+      category: candidate.category,
+      enabled: isCandidateEnabled(candidate, state),
+    };
+  }
+
+  useAppStore.setState({
+    candidates: [...candidates],
+    boxes,
+    currentPage: candidates[0]?.pageIndex ?? state.currentPage,
+  });
+}
+
+function isCandidateEnabled(
+  candidate: Candidate,
+  state: ReturnType<typeof useAppStore.getState>,
+): boolean {
+  if (candidate.source === 'ner' || candidate.source === 'ocr-ner') {
+    return (
+      (state.categoryEnabled[candidate.category] ?? false) &&
+      candidate.confidence >= state.nerThreshold
+    );
+  }
+  return state.categoryEnabled[candidate.category] ?? true;
 }

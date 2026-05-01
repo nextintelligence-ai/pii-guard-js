@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ApplyReport } from '@/types/domain';
+import type { ApplyReport, Candidate } from '@/types/domain';
 import { createId } from '@/utils/id';
 
 export type BatchJobStatus =
@@ -18,6 +18,7 @@ export type BatchJob = {
   file: File;
   fileName: string;
   status: BatchJobStatus;
+  candidates: Candidate[];
   candidateCount: number;
   enabledBoxCount: number;
   report: ApplyReport | null;
@@ -67,6 +68,7 @@ function createJob(file: File): BatchJob {
     file,
     fileName: file.name,
     status: 'queued',
+    candidates: [],
     candidateCount: 0,
     enabledBoxCount: 0,
     report: null,

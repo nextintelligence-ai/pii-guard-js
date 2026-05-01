@@ -66,6 +66,7 @@ export function BatchJobPage({ jobId }: Props) {
               const { blob, report } = await applyCurrentDocument();
               updateJob(job.id, {
                 status: report.postCheckLeaks > 0 ? 'warning' : 'done',
+                candidates: useAppStore.getState().candidates,
                 candidateCount: useAppStore.getState().candidates.length,
                 enabledBoxCount: Object.values(useAppStore.getState().boxes).filter(
                   (box) => box.enabled,
