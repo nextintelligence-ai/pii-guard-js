@@ -13,6 +13,10 @@ const KOREAN_REC_MODEL_ASSET = '/models/paddleocr/korean_PP-OCRv5_mobile_rec_onn
 const DEFAULT_BACKEND: OcrBackend = 'auto';
 const ROTATION_FALLBACKS = [90, 270, 180] as const;
 const MIN_ACCEPTABLE_OCR_SCORE = 4;
+const MIN_CONFIDENT_TEXT_SCORE = 0.75;
+const VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE = 0.5;
+const VERTICAL_LINE_ASPECT_RATIO = 1.5;
+const VERTICAL_SELECTION_PENALTY = 0.35;
 
 type OcrRotation = 0 | (typeof ROTATION_FALLBACKS)[number];
 
@@ -26,6 +30,29 @@ type RotatedBlob = {
   originalWidth: number;
   originalHeight: number;
   rotation: Exclude<OcrRotation, 0>;
+};
+
+type OcrResultSummary = {
+  rotation: OcrRotation;
+  itemCount: number;
+  textChars: number;
+  textScore: number;
+  meanConfidence: number;
+  verticalTextRatio: number;
+  selectionScore: number;
+};
+
+type RotationCandidate = {
+  rotation: OcrRotation;
+  result: OcrResult | undefined;
+  summary: OcrResultSummary;
+};
+
+type RotationDiagnostics = {
+  pageIndex: number;
+  selectedRotation: OcrRotation;
+  reason: string;
+  candidates: OcrResultSummary[];
 };
 
 const engines = new Map<OcrBackend, Promise<OcrEngine>>();
@@ -61,25 +88,35 @@ const api: OcrWorkerApi = {
 async function recognizeBlob(pageIndex: number, blob: Blob, backend: OcrBackend) {
   const engine = await getOcrEngine(backend);
   const [result] = await engine.predict(blob);
+  const original = buildRotationCandidate(0, result);
+  const candidates: RotationCandidate[] = [original];
+  const shouldProbe = shouldProbeRotations(original.summary);
 
-  if (isGoodOcrResult(result)) {
-    return normalizeOcrResult(withRotationRuntime(result, 0), pageIndex);
+  if (shouldProbe) {
+    for (const rotation of ROTATION_FALLBACKS) {
+      const rotated = await rotateBlob(blob, rotation);
+      if (!rotated) continue;
+
+      const [rotatedResult] = await engine.predict(rotated.blob);
+      const mappedResult = rotatedResult
+        ? mapRotatedResultToOriginal(rotatedResult, rotated)
+        : undefined;
+      const candidate = buildRotationCandidate(rotation, mappedResult, rotatedResult);
+      candidates.push(candidate);
+      if (isConfidentHorizontalResult(candidate.summary)) break;
+    }
   }
 
-  for (const rotation of ROTATION_FALLBACKS) {
-    const rotated = await rotateBlob(blob, rotation);
-    if (!rotated) continue;
+  const selected = selectBestRotationCandidate(candidates);
+  const diagnostics = buildRotationDiagnostics(pageIndex, selected, candidates, shouldProbe);
+  logRotationDiagnostics(diagnostics);
 
-    const [rotatedResult] = await engine.predict(rotated.blob);
-    if (!isBetterOcrResult(rotatedResult, result)) continue;
-
-    return normalizeOcrResult(
-      withRotationRuntime(mapRotatedResultToOriginal(rotatedResult, rotated), rotation),
-      pageIndex,
-    );
-  }
-
-  return result ? normalizeOcrResult(withRotationRuntime(result, 0), pageIndex) : { lines: [] };
+  return selected.result
+    ? normalizeOcrResult(
+        withRotationRuntime(selected.result, selected.rotation, diagnostics),
+        pageIndex,
+      )
+    : { lines: [] };
 }
 
 async function disposeEngine(backend: OcrBackend): Promise<void> {
@@ -130,23 +167,6 @@ async function createOcrEngine(backend: OcrBackend): Promise<OcrEngine> {
 }
 
 expose(api);
-
-function isGoodOcrResult(result: OcrResult | undefined): result is OcrResult {
-  return ocrResultScore(result) >= MIN_ACCEPTABLE_OCR_SCORE;
-}
-
-function isBetterOcrResult(candidate: OcrResult | undefined, baseline: OcrResult | undefined): candidate is OcrResult {
-  return ocrResultScore(candidate) > ocrResultScore(baseline);
-}
-
-function ocrResultScore(result: OcrResult | undefined): number {
-  if (!result) return 0;
-  return result.items.reduce((score, item) => {
-    const textLength = item.text.trim().length;
-    if (textLength === 0) return score;
-    return score + textLength * (typeof item.score === 'number' ? item.score : 0.5);
-  }, 0);
-}
 
 async function rotateBlob(blob: Blob, rotation: Exclude<OcrRotation, 0>): Promise<RotatedBlob | null> {
   if (
@@ -233,12 +253,125 @@ function mapRotatedPointToOriginal(
   return [x, y];
 }
 
-function withRotationRuntime(result: OcrResult, rotation: OcrRotation): OcrResult {
+function buildRotationCandidate(
+  rotation: OcrRotation,
+  result: OcrResult | undefined,
+  summarySource = result,
+): RotationCandidate {
+  return {
+    rotation,
+    result,
+    summary: summarizeOcrResult(summarySource, rotation),
+  };
+}
+
+function summarizeOcrResult(result: OcrResult | undefined, rotation: OcrRotation): OcrResultSummary {
+  const items = result?.items ?? [];
+  let textChars = 0;
+  let textScore = 0;
+  let confidenceSum = 0;
+  let verticalTextChars = 0;
+
+  for (const item of items) {
+    const chars = item.text.trim().length;
+    if (chars === 0) continue;
+    const confidence = typeof item.score === 'number' ? item.score : 0.5;
+    textChars += chars;
+    textScore += chars * confidence;
+    confidenceSum += chars * confidence;
+    if (isVerticalTextLine(item.poly)) verticalTextChars += chars;
+  }
+
+  const meanConfidence = textChars === 0 ? 0 : confidenceSum / textChars;
+  const verticalTextRatio = textChars === 0 ? 0 : verticalTextChars / textChars;
+  const selectionScore = textScore * (1 - verticalTextRatio * VERTICAL_SELECTION_PENALTY);
+
+  return {
+    rotation,
+    itemCount: items.length,
+    textChars,
+    textScore: roundDiagnosticNumber(textScore),
+    meanConfidence: roundDiagnosticNumber(meanConfidence),
+    verticalTextRatio: roundDiagnosticNumber(verticalTextRatio),
+    selectionScore: roundDiagnosticNumber(selectionScore),
+  };
+}
+
+function shouldProbeRotations(summary: OcrResultSummary): boolean {
+  return (
+    summary.textScore < MIN_ACCEPTABLE_OCR_SCORE ||
+    summary.meanConfidence < MIN_CONFIDENT_TEXT_SCORE ||
+    summary.verticalTextRatio >= VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE
+  );
+}
+
+function isConfidentHorizontalResult(summary: OcrResultSummary): boolean {
+  return (
+    summary.textScore >= MIN_ACCEPTABLE_OCR_SCORE &&
+    summary.meanConfidence >= MIN_CONFIDENT_TEXT_SCORE &&
+    summary.verticalTextRatio < VERTICAL_TEXT_RATIO_FOR_ROTATION_PROBE
+  );
+}
+
+function selectBestRotationCandidate(candidates: RotationCandidate[]): RotationCandidate {
+  return candidates.reduce((best, candidate) =>
+    candidate.summary.selectionScore > best.summary.selectionScore ? candidate : best,
+  );
+}
+
+function buildRotationDiagnostics(
+  pageIndex: number,
+  selected: RotationCandidate,
+  candidates: RotationCandidate[],
+  probedRotations: boolean,
+): RotationDiagnostics {
+  return {
+    pageIndex,
+    selectedRotation: selected.rotation,
+    reason: rotationSelectionReason(selected, candidates, probedRotations),
+    candidates: candidates.map((candidate) => candidate.summary),
+  };
+}
+
+function rotationSelectionReason(
+  selected: RotationCandidate,
+  candidates: RotationCandidate[],
+  probedRotations: boolean,
+): string {
+  if (!probedRotations) return 'original-confident';
+  if (candidates.length === 1) return 'rotation-probe-unavailable';
+  return selected.rotation === 0
+    ? 'original-selected-after-rotation-probe'
+    : 'rotated-selected-after-rotation-probe';
+}
+
+function logRotationDiagnostics(diagnostics: RotationDiagnostics): void {
+  console.info('[ocr.worker] rotation diagnostics', diagnostics);
+}
+
+function isVerticalTextLine(poly: Array<[number, number]>): boolean {
+  const xs = poly.map(([x]) => x);
+  const ys = poly.map(([, y]) => y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+  return height / Math.max(1, width) >= VERTICAL_LINE_ASPECT_RATIO;
+}
+
+function roundDiagnosticNumber(value: number): number {
+  return Number(value.toFixed(4));
+}
+
+function withRotationRuntime(
+  result: OcrResult,
+  rotation: OcrRotation,
+  diagnostics: RotationDiagnostics,
+): OcrResult {
   return {
     ...result,
     runtime: {
       ...result.runtime,
       rotationApplied: rotation,
+      rotationDiagnostics: diagnostics,
     } as OcrResult['runtime'],
   };
 }

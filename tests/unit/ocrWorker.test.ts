@@ -322,4 +322,95 @@ describe('ocr.worker', () => {
     expect(context.rotate).toHaveBeenCalledWith(Math.PI / 2);
     expect(bitmap.close).toHaveBeenCalled();
   });
+
+  it('probes rotations when the original OCR result is only weakly acceptable', async () => {
+    paddle.predict
+      .mockResolvedValueOnce([
+        {
+          items: [
+            {
+              text: 'O1O-I234-5678',
+              score: 0.45,
+              poly: [
+                [0, 0],
+                [100, 0],
+                [100, 20],
+                [0, 20],
+              ],
+            },
+          ],
+          runtime: { requestedBackend: 'auto' },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          items: [
+            {
+              text: '010-1234-5678',
+              score: 0.93,
+              poly: [
+                [10, 20],
+                [30, 20],
+                [30, 40],
+                [10, 40],
+              ],
+            },
+          ],
+          runtime: { requestedBackend: 'auto' },
+        },
+      ]);
+
+    const bitmap = { width: 100, height: 60, close: vi.fn() };
+    const context = {
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    class MockOffscreenCanvas {
+      constructor(
+        public width: number,
+        public height: number,
+      ) {}
+
+      getContext(type: string) {
+        return type === '2d' ? context : null;
+      }
+
+      async convertToBlob() {
+        return new Blob([new Uint8Array([9, 8, 7])], { type: 'image/png' });
+      }
+    }
+
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => bitmap));
+    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
+
+    try {
+      await import('@/workers/ocr.worker');
+
+      await expect(
+        exposedApi().recognizePng({
+          pageIndex: 2,
+          png: new Uint8Array([1, 2, 3]),
+        }),
+      ).resolves.toMatchObject({
+        lines: [{ text: '010-1234-5678' }],
+        runtime: expect.objectContaining({
+          rotationApplied: 90,
+          rotationDiagnostics: expect.objectContaining({
+            pageIndex: 2,
+            selectedRotation: 90,
+            candidates: [
+              expect.objectContaining({ rotation: 0 }),
+              expect.objectContaining({ rotation: 90 }),
+            ],
+          }),
+        }),
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(paddle.predict).toHaveBeenCalledTimes(2);
+    expect(context.rotate).toHaveBeenCalledWith(Math.PI / 2);
+  });
 });
