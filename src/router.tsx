@@ -4,12 +4,9 @@ import {
   createRouter,
 } from '@tanstack/react-router';
 import { AppShell } from '@/AppShell';
+import { BatchPage } from '@/pages/BatchPage';
 import { HomePage } from '@/pages/HomePage';
 import { SinglePage } from '@/pages/SinglePage';
-
-function BatchPlaceholder() {
-  return <div>일괄 처리</div>;
-}
 
 function BatchJobPlaceholder() {
   return <div>일괄 상세</div>;
@@ -34,7 +31,7 @@ const singleRoute = createRoute({
 const batchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/batch',
-  component: BatchPlaceholder,
+  component: BatchPage,
 });
 
 const batchJobRoute = createRoute({
