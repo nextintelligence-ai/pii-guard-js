@@ -4,6 +4,11 @@ import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
 import { runBatchJob } from '@/core/batch/runBatchJob';
 import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { buildContextualNerMaps } from '@/core/nerContext';
+import {
+  logNerDebug,
+  summarizeNerEntities,
+  summarizeStructuredLines,
+} from '@/core/nerDebug';
 import { entitiesToBoxes, serialize, type NerBox } from '@/core/spanMap';
 import { useNerModel } from '@/hooks/useNerModel';
 import { useBatchStore } from '@/state/batchStore';
@@ -60,10 +65,10 @@ export function useBatchRunner(): {
               file: job.file,
               settings: useBatchStore.getState().settings,
               pdf,
-              ocrDetectPage: createOcrDetector(pdf, nerWorker ?? undefined),
+              ocrDetectPage: createOcrDetector(pdf, job.file.name, nerWorker ?? undefined),
             };
             if (nerWorker !== null) {
-              batchInput.nerDetectPage = createTextNerDetector(pdf, nerWorker);
+              batchInput.nerDetectPage = createTextNerDetector(pdf, job.file.name, nerWorker);
             }
             const result = await runBatchJob(batchInput);
             useBatchStore.getState().updateJob(job.id, result);
@@ -87,6 +92,7 @@ export function useBatchRunner(): {
 
 function createOcrDetector(
   pdf: Pick<PdfWorkerApi, 'renderPagePng'>,
+  fileName: string,
   nerWorker?: NerWorkerApi,
 ) {
   return async (pageIndex: number): Promise<Candidate[]> => {
@@ -109,11 +115,21 @@ function createOcrDetector(
     });
     if (pageText.trim().length === 0) return candidates;
 
-    const entities = filterNerEntitiesForText(pageText, await nerWorker.classify(pageText));
+    const rawEntities = await nerWorker.classify(pageText);
+    const entities = filterNerEntitiesForText(pageText, rawEntities);
     const nerBoxes = ocrLinesToNerBoxes({
       renderScale: rendered.scale,
       lines: result.lines,
       entities,
+    });
+    logNerDebug('batch ocr classify result', {
+      fileName,
+      pageIndex,
+      pageText,
+      rawEntities: summarizeNerEntities(pageText, rawEntities),
+      filteredEntities: summarizeNerEntities(pageText, entities),
+      droppedEntities: rawEntities.length - entities.length,
+      boxes: nerBoxes,
     });
     return [...candidates, ...nerBoxesToCandidates(pageIndex, nerBoxes, 'ocr-ner')];
   };
@@ -121,34 +137,61 @@ function createOcrDetector(
 
 function createTextNerDetector(
   pdf: Pick<PdfWorkerApi, 'extractStructuredText'>,
+  fileName: string,
   nerWorker: NerWorkerApi,
 ) {
   return async (pageIndex: number): Promise<Candidate[]> => {
     const lines = await pdf.extractStructuredText(pageIndex);
     const pageMap = serialize(lines);
     const boxes: NerBox[] = [];
+    logNerDebug('batch page text extracted', {
+      fileName,
+      pageIndex,
+      chars: pageMap.pageText.length,
+      pageText: pageMap.pageText,
+      lines: summarizeStructuredLines(lines),
+    });
 
     if (pageMap.pageText.trim().length > 0) {
-      boxes.push(
-        ...entitiesToBoxes(
-          pageMap,
-          filterNerEntitiesForText(pageMap.pageText, await nerWorker.classify(pageMap.pageText)),
-        ),
-      );
+      const rawEntities = await nerWorker.classify(pageMap.pageText);
+      const entities = filterNerEntitiesForText(pageMap.pageText, rawEntities);
+      const pageBoxes = entitiesToBoxes(pageMap, entities);
+      logNerDebug('batch page classify result', {
+        fileName,
+        pageIndex,
+        pageText: pageMap.pageText,
+        rawEntities: summarizeNerEntities(pageMap.pageText, rawEntities),
+        filteredEntities: summarizeNerEntities(pageMap.pageText, entities),
+        droppedEntities: rawEntities.length - entities.length,
+        boxes: pageBoxes,
+      });
+      boxes.push(...pageBoxes);
     }
 
-    for (const contextMap of buildContextualNerMaps(lines)) {
+    for (const [contextIndex, contextMap] of buildContextualNerMaps(lines).entries()) {
       if (contextMap.pageText.trim().length === 0) continue;
-      const entities = filterNerEntitiesForText(
-        contextMap.pageText,
-        await nerWorker.classify(contextMap.pageText),
+      logNerDebug('batch context classify input', {
+        fileName,
+        pageIndex,
+        contextIndex,
+        chars: contextMap.pageText.length,
+        pageText: contextMap.pageText,
+      });
+      const rawEntities = await nerWorker.classify(contextMap.pageText);
+      const entities = filterNerEntitiesForText(contextMap.pageText, rawEntities);
+      const contextBoxes = entitiesToBoxes(
+        contextMap,
+        entities.filter((entity) => entity.entity_group === 'private_person'),
       );
-      boxes.push(
-        ...entitiesToBoxes(
-          contextMap,
-          entities.filter((entity) => entity.entity_group === 'private_person'),
-        ),
-      );
+      logNerDebug('batch context classify result', {
+        fileName,
+        pageIndex,
+        contextIndex,
+        rawEntities: summarizeNerEntities(contextMap.pageText, rawEntities),
+        filteredEntities: summarizeNerEntities(contextMap.pageText, entities),
+        boxes: contextBoxes,
+      });
+      boxes.push(...contextBoxes);
     }
 
     return nerBoxesToCandidates(pageIndex, dedupeNerBoxes(boxes), 'ner');

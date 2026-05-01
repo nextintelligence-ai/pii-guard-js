@@ -3,6 +3,7 @@ import { detectOcrCandidates } from '@/core/ocr/detect';
 import { removeDuplicateOcrCandidates } from '@/core/ocr/dedupe';
 import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
 import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
+import { logNerDebug, summarizeNerEntities } from '@/core/nerDebug';
 import { useAppStore } from '@/state/store';
 import { useNerModel } from './useNerModel';
 import { getOcrWorker } from '@/workers/ocrWorkerClient';
@@ -120,6 +121,7 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
             canRunNer && nerWorker
               ? await detectOcrNerBoxes(
                   {
+                    pageIndex,
                     renderScale: rendered.scale,
                     lines: result.lines,
                   },
@@ -186,6 +188,7 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
 
 async function detectOcrNerBoxes(
   input: {
+    pageIndex: number;
     renderScale: number;
     lines: OcrLine[];
   },
@@ -194,9 +197,19 @@ async function detectOcrNerBoxes(
 ): Promise<NerBox[]> {
   const { pageText } = ocrLinesToPageText(input);
   if (pageText.trim().length === 0) return [];
-  const entities = filterNerEntitiesForText(pageText, await nerWorker.classify(pageText));
+  const rawEntities = await nerWorker.classify(pageText);
+  const entities = filterNerEntitiesForText(pageText, rawEntities);
   if (isStaleJob()) return [];
-  return ocrLinesToNerBoxes({ ...input, entities });
+  const boxes = ocrLinesToNerBoxes({ ...input, entities });
+  logNerDebug('ocr classify result', {
+    pageIndex: input.pageIndex,
+    pageText,
+    rawEntities: summarizeNerEntities(pageText, rawEntities),
+    filteredEntities: summarizeNerEntities(pageText, entities),
+    droppedEntities: rawEntities.length - entities.length,
+    boxes,
+  });
+  return boxes;
 }
 
 function getErrorMessage(error: unknown): string {

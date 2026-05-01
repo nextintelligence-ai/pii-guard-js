@@ -9,6 +9,11 @@ import {
 } from '@/core/spanMap';
 import { buildContextualNerMaps } from '@/core/nerContext';
 import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
+import {
+  logNerDebug,
+  summarizeNerEntities,
+  summarizeStructuredLines,
+} from '@/core/nerDebug';
 import { useNerModel } from './useNerModel';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 
@@ -31,7 +36,16 @@ export function useNerDetect(pageCount: number, currentPage: number): void {
   const nerState = ner.state;
 
   useEffect(() => {
-    if (nerState !== 'ready' || !nerWorker || pageCount === 0) return;
+    if (nerState !== 'ready' || !nerWorker || pageCount === 0) {
+      console.info('[useNerDetect] NER 분석 대기', {
+        reason: pageCount === 0 ? 'no-pages' : 'model-not-ready',
+        nerState,
+        hasWorker: nerWorker !== null,
+        pageCount,
+        currentPage,
+      });
+      return;
+    }
     const d = new NerDispatcher();
     d.enqueueAll(pageCount);
     dispatcherRef.current = d;
@@ -65,6 +79,12 @@ export function useNerDetect(pageCount: number, currentPage: number): void {
             chars: map.pageText.length,
             ms: elapsedMs(textStartedAt),
           });
+          logNerDebug('page text extracted', {
+            pageIndex: p,
+            chars: map.pageText.length,
+            pageText: map.pageText,
+            lines: summarizeStructuredLines(lines),
+          });
           const classifyStartedAt = performance.now();
           const rawEnts = await traceStage(
             p,
@@ -79,6 +99,12 @@ export function useNerDetect(pageCount: number, currentPage: number): void {
             ms: elapsedMs(classifyStartedAt),
           });
           const baseBoxes = entitiesToBoxes(map, ents);
+          logNerDebug('page classify result', {
+            pageIndex: p,
+            rawEntities: summarizeNerEntities(map.pageText, rawEnts),
+            filteredEntities: summarizeNerEntities(map.pageText, ents),
+            droppedEntities: rawEnts.length - ents.length,
+          });
           const contextualBoxes = await classifyContextualMaps(
             p,
             lines,
@@ -87,6 +113,12 @@ export function useNerDetect(pageCount: number, currentPage: number): void {
           );
           if (isStaleJob()) return;
           const boxes = dedupeNerBoxes([...baseBoxes, ...contextualBoxes]);
+          logNerDebug('page boxes', {
+            pageIndex: p,
+            baseBoxes,
+            contextualBoxes,
+            boxes,
+          });
           addCandidates(p, boxes);
           d.markDone(p);
           setProgress(d.progress());
@@ -134,8 +166,14 @@ async function classifyContextualMaps(
   const boxes: NerBox[] = [];
   let entityCount = 0;
   const startedAt = performance.now();
-  for (const map of maps) {
+  for (const [contextIndex, map] of maps.entries()) {
     if (isStaleJob()) return [];
+    logNerDebug('context classify input', {
+      pageIndex,
+      contextIndex,
+      chars: map.pageText.length,
+      pageText: map.pageText,
+    });
     const rawEnts = await traceStage(
       pageIndex,
       '문맥 classify',
@@ -145,12 +183,18 @@ async function classifyContextualMaps(
     if (isStaleJob()) return [];
     const ents = filterNerEntitiesForText(map.pageText, rawEnts);
     entityCount += ents.length;
-    boxes.push(
-      ...entitiesToBoxes(
-        map,
-        ents.filter((entity) => entity.entity_group === 'private_person'),
-      ),
+    const contextBoxes = entitiesToBoxes(
+      map,
+      ents.filter((entity) => entity.entity_group === 'private_person'),
     );
+    logNerDebug('context classify result', {
+      pageIndex,
+      contextIndex,
+      rawEntities: summarizeNerEntities(map.pageText, rawEnts),
+      filteredEntities: summarizeNerEntities(map.pageText, ents),
+      boxes: contextBoxes,
+    });
+    boxes.push(...contextBoxes);
   }
   console.info(`[useNerDetect] page ${pageIndex} 문맥 NER 완료`, {
     contexts: maps.length,

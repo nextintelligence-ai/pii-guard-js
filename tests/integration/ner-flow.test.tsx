@@ -74,6 +74,7 @@ describe('NER 플로우 통합', () => {
 
   beforeEach(() => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    localStorage.clear();
     useAppStore.getState().reset();
     useAppStore.getState().setDoc({
       kind: 'ready',
@@ -90,6 +91,7 @@ describe('NER 플로우 통합', () => {
       });
     }
     root = null;
+    localStorage.clear();
     useAppStore.getState().reset();
   });
 
@@ -144,6 +146,65 @@ describe('NER 플로우 통합', () => {
         boxes: 1,
         entities: 1,
         chars: 22,
+      }),
+    );
+  });
+
+  it('NER 디버그 플래그가 켜지면 원문, entity, box 세부 로그를 남긴다', async () => {
+    localStorage.setItem('piiGuard.debugNer', '1');
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    function Probe() {
+      useNerDetect(1, 0);
+      return null;
+    }
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().nerProgress.done === 1);
+
+    expect(info).toHaveBeenCalledWith(
+      '[NER debug] page text extracted',
+      expect.objectContaining({
+        pageIndex: 0,
+        chars: 22,
+        pageText: 'My name is Alice Smith',
+        lines: [{ id: 0, text: 'My name is Alice Smith' }],
+      }),
+    );
+    expect(info).toHaveBeenCalledWith(
+      '[NER debug] page classify result',
+      expect.objectContaining({
+        pageIndex: 0,
+        rawEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+        filteredEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+      }),
+    );
+    expect(info).toHaveBeenCalledWith(
+      '[NER debug] page boxes',
+      expect.objectContaining({
+        pageIndex: 0,
+        baseBoxes: [
+          expect.objectContaining({
+            category: 'private_person',
+            bbox: { x: 55, y: 0, w: 55, h: 10 },
+          }),
+        ],
       }),
     );
   });

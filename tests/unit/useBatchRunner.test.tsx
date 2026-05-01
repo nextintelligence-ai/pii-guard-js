@@ -51,6 +51,7 @@ describe('useBatchRunner', () => {
 
   beforeEach(() => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    localStorage.clear();
     useBatchStore.getState().reset();
     vi.mocked(getPdfWorker).mockResolvedValue({} as Awaited<ReturnType<typeof getPdfWorker>>);
   });
@@ -61,8 +62,10 @@ describe('useBatchRunner', () => {
     }
     root = null;
     controls = null;
+    localStorage.clear();
     useBatchStore.getState().reset();
     vi.clearAllMocks();
+    (console.info as typeof console.info & { mockRestore?: () => void }).mockRestore?.();
   });
 
   it('queued job을 순서대로 처리하고 첫 실패 후에도 다음 job을 실행한다', async () => {
@@ -115,5 +118,91 @@ describe('useBatchRunner', () => {
       'failed',
       'done',
     ]);
+  });
+
+  it('batch NER 디버그 플래그가 켜지면 batch 원문과 NER 결과를 남긴다', async () => {
+    localStorage.setItem('piiGuard.debugNer', '1');
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const file = new File(['a'], 'batch.pdf', { type: 'application/pdf' });
+    const text = '담당자 Alice Smith';
+    vi.mocked(getPdfWorker).mockResolvedValue({
+      extractStructuredText: vi.fn().mockResolvedValue([
+        {
+          id: 0,
+          spans: [
+            {
+              id: 0,
+              chars: [...text].map((ch, i) => ({
+                ch,
+                bbox: { x: i * 5, y: 0, w: 5, h: 10 },
+              })),
+            },
+          ],
+        },
+      ]),
+    } as unknown as Awaited<ReturnType<typeof getPdfWorker>>);
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_person',
+        start: 4,
+        end: 15,
+        score: 0.98,
+        word: 'Alice Smith',
+      },
+    ]);
+    vi.mocked(runBatchJob).mockImplementation(async (input) => {
+      const candidates = await input.nerDetectPage!(0);
+      return {
+        status: 'done',
+        candidates,
+        candidateCount: candidates.length,
+        enabledBoxCount: candidates.length,
+        report: null,
+        outputBlob: new Blob(['ok'], { type: 'application/pdf' }),
+        errorMessage: null,
+        needsReview: false,
+      };
+    });
+    useBatchStore.getState().addFiles([file]);
+
+    const container = document.createElement('div');
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<Harness />);
+    });
+
+    await act(async () => {
+      controls?.start();
+    });
+
+    await waitFor(() => useBatchStore.getState().jobs[0]?.status === 'done');
+
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[NER debug] batch page classify result',
+      expect.objectContaining({
+        fileName: 'batch.pdf',
+        pageIndex: 0,
+        pageText: '담당자 Alice Smith',
+        rawEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+        filteredEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+        boxes: [
+          expect.objectContaining({
+            category: 'private_person',
+          }),
+        ],
+      }),
+    );
   });
 });

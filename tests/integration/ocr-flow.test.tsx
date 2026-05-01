@@ -49,6 +49,7 @@ describe('OCR 탐지 플로우', () => {
 
   beforeEach(() => {
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    localStorage.clear();
     useAppStore.getState().reset();
     vi.clearAllMocks();
     fakePdfWorker.inspectPageContent.mockResolvedValue({
@@ -93,6 +94,7 @@ describe('OCR 탐지 플로우', () => {
       });
     }
     root = null;
+    localStorage.clear();
     useAppStore.getState().reset();
     (console.info as typeof console.info & { mockRestore?: () => void }).mockRestore?.();
     (console.warn as typeof console.warn & { mockRestore?: () => void }).mockRestore?.();
@@ -264,6 +266,83 @@ describe('OCR 탐지 플로우', () => {
       enabled: true,
     });
     expect(state.boxes[candidate!.id]?.bbox[0]).toBeGreaterThan(0);
+  });
+
+  it('OCR-NER 디버그 플래그가 켜지면 OCR 원문과 NER 결과를 남긴다', async () => {
+    localStorage.setItem('piiGuard.debugNer', '1');
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-name',
+          pageIndex: 0,
+          text: '담당자 Alice Smith',
+          score: 0.96,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_person',
+        start: 4,
+        end: 15,
+        score: 0.98,
+        word: 'Alice Smith',
+      },
+    ]);
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [{ index: 0, widthPt: 100, heightPt: 100, rotation: 0 }],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() =>
+      useAppStore.getState().candidates.some((c) => c.source === 'ocr-ner'),
+    );
+
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[NER debug] ocr classify result',
+      expect.objectContaining({
+        pageIndex: 0,
+        pageText: '담당자 Alice Smith',
+        rawEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+        filteredEntities: [
+          expect.objectContaining({
+            entity_group: 'private_person',
+            word: 'Alice Smith',
+            text: 'Alice Smith',
+          }),
+        ],
+        boxes: [
+          expect.objectContaining({
+            category: 'private_person',
+          }),
+        ],
+      }),
+    );
   });
 
   it('NER 준비 후 기존 OCR 후보만 있는 페이지도 OCR-NER 대상으로 다시 처리한다', async () => {
