@@ -1,5 +1,7 @@
 import { useNerModel } from '@/hooks/useNerModel';
+import { useAppStore } from '@/state/store';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 
 /**
  * NER 모델 로드 버튼.
@@ -9,15 +11,38 @@ import { Button } from '@/components/ui/button';
  */
 export function NerLoadButton() {
   const ner = useNerModel();
+  const nerThreshold = useAppStore((s) => s.nerThreshold);
+  const setNerThreshold = useAppStore((s) => s.setNerThreshold);
+
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => void ner.loadFromUserDir()}
-      disabled={ner.state === 'loading'}
-    >
-      {ner.state === 'ready' ? 'NER 로드됨' : 'NER 모델 로드'}
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => void ner.loadFromUserDir()}
+        disabled={ner.state === 'loading'}
+      >
+        {ner.state === 'ready' ? 'NER 로드됨' : 'NER 모델 로드'}
+      </Button>
+      {ner.state === 'ready' && (
+        <div className="flex min-w-[190px] items-center gap-2">
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
+            NER 신뢰도 {nerThreshold.toFixed(2)}
+          </span>
+          <Slider
+            className="w-24"
+            min={0.5}
+            max={0.95}
+            step={0.05}
+            value={[nerThreshold]}
+            onValueChange={([v]) => {
+              if (typeof v === 'number') setNerThreshold(v);
+            }}
+            aria-label="NER 신뢰도 임계값"
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

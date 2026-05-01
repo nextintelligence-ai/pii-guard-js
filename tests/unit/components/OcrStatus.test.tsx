@@ -42,6 +42,10 @@ describe('OcrStatus', () => {
 
     expect(container.textContent).toContain('OCR 1/3 페이지');
     expect(container.textContent).toContain('p2 처리 중');
+    const statusRow = container.querySelector('[data-testid="ocr-status-row"]');
+    expect(statusRow).not.toBeNull();
+    expect(statusRow?.textContent).toContain('p2 처리 중');
+    expect(container.querySelector('p')).toBeNull();
   });
 
   it('renders failed page messages for debugging', async () => {
@@ -67,13 +71,13 @@ describe('OcrStatus', () => {
     expect(container.textContent).toContain('p3: OCR timeout');
   });
 
-  it('renders nothing before OCR starts', async () => {
+  it('renders idle state before OCR starts', async () => {
     const container = document.createElement('div');
     root = createRoot(container);
     await act(async () => {
       root?.render(<OcrStatus />);
     });
 
-    expect(container.innerHTML).toBe('');
+    expect(container.textContent).toContain('OCR 대기');
   });
 });

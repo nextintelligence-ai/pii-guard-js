@@ -6,12 +6,12 @@ import type { DetectionCategory, RedactionBox } from '@/types/domain';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 const LABELS: Record<DetectionCategory, string> = {
@@ -67,6 +67,13 @@ type DetectedBox = RedactionBox & {
   source: 'auto' | 'ner' | 'ocr' | 'ocr-ner';
 };
 type ManualBox = RedactionBox & { source: 'manual-rect' | 'text-select' };
+type DetectionSource = 'regex' | 'ner' | 'ocr';
+type SourceGroup = {
+  source: DetectionSource;
+  items: DetectedBox[];
+};
+
+const CATEGORY_ORDER: DetectionCategory[] = [...REGEX_CATEGORIES, ...NER_CATEGORIES];
 
 export function CandidatePanel() {
   const detectedBoxes = useAppStore(
@@ -91,7 +98,6 @@ export function CandidatePanel() {
   );
   const cats = useAppStore((s) => s.categoryEnabled);
   const nerThreshold = useAppStore((s) => s.nerThreshold);
-  const setNerThreshold = useAppStore((s) => s.setNerThreshold);
   const toggle = useAppStore((s) => s.toggleBox);
   const toggleCat = useAppStore((s) => s.toggleCategory);
   const goToPage = useAppStore((s) => s.goToPage);
@@ -123,8 +129,8 @@ export function CandidatePanel() {
   const totalAuto = regexBoxes.length + ocrBoxes.length + nerBoxes.length;
 
   return (
-    <div className="space-y-4">
-      <section className="space-y-2">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <section className="flex min-h-0 flex-1 flex-col space-y-2">
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold">자동으로 찾은 개인정보</h2>
           <p className="text-xs text-muted-foreground">
@@ -133,97 +139,43 @@ export function CandidatePanel() {
               : '발견된 개인정보가 없어요. 필요하면 PDF에서 직접 박스를 그려도 돼요'}
           </p>
         </div>
-        {REGEX_CATEGORIES.map((cat) => {
-          const items = regexBoxes.filter((b) => b.category === cat);
-          return (
-            <CategoryGroup
-              key={cat}
-              cat={cat}
-              source="regex"
-              items={items}
-              enabled={cats[cat]}
-              selectedBoxId={selectedBoxId}
-              candidateById={candidateById}
-              onToggleCategory={() => toggleCat(cat)}
-              onToggleBox={toggle}
-              onGoTo={goToPage}
-              onFocusBox={(id, page) => {
-                goToPage(page);
-                focusBox(id);
-              }}
-            />
-          );
-        })}
-        {REGEX_CATEGORIES.map((cat) => {
-          const items = ocrBoxes.filter((b) => b.category === cat);
-          return (
-            <CategoryGroup
-              key={`ocr-${cat}`}
-              cat={cat}
-              source="ocr"
-              items={items}
-              enabled={cats[cat]}
-              selectedBoxId={selectedBoxId}
-              candidateById={candidateById}
-              onToggleCategory={() => toggleCat(cat)}
-              onToggleBox={toggle}
-              onGoTo={goToPage}
-              onFocusBox={(id, page) => {
-                goToPage(page);
-                focusBox(id);
-              }}
-            />
-          );
-        })}
-        <div className="space-y-2 pt-1">
-          <div className="rounded-md border bg-muted/30 px-3 py-2">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="text-xs font-medium">NER 신뢰도</span>
-              <span className="text-xs text-muted-foreground">
-                신뢰도 ≥ {nerThreshold.toFixed(2)}
-              </span>
-            </div>
-            <Slider
-              min={0.5}
-              max={0.95}
-              step={0.05}
-              value={[nerThreshold]}
-              onValueChange={([v]) => {
-                if (typeof v === 'number') setNerThreshold(v);
-              }}
-              aria-label="NER 신뢰도 임계값"
-            />
+        <ScrollArea aria-label="자동 개인정보 목록" className="min-h-0 flex-1">
+          <div className="space-y-2 pr-2">
+            {CATEGORY_ORDER.map((cat) => {
+              const sourceGroups = buildSourceGroups({
+                cat,
+                regexBoxes,
+                ocrBoxes,
+                nerBoxes,
+              });
+              return (
+                <CategoryGroup
+                  key={cat}
+                  cat={cat}
+                  sourceGroups={sourceGroups}
+                  enabled={cats[cat]}
+                  selectedBoxId={selectedBoxId}
+                  candidateById={candidateById}
+                  onToggleCategory={() => toggleCat(cat)}
+                  onToggleBox={toggle}
+                  onGoTo={goToPage}
+                  onFocusBox={(id, page) => {
+                    goToPage(page);
+                    focusBox(id);
+                  }}
+                />
+              );
+            })}
+            {nerBoxes.length === 0 && (
+              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                NER 모델을 로드하면 사람 이름·주소·URL·날짜·시크릿 자동 검출이 추가됩니다.
+              </div>
+            )}
           </div>
-          {nerBoxes.length === 0 && (
-            <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              NER 모델을 로드하면 사람 이름·주소·URL·날짜·시크릿 자동 검출이 추가됩니다.
-            </div>
-          )}
-          {NER_CATEGORIES.map((cat) => {
-            const items = nerBoxes.filter((b) => b.category === cat);
-            return (
-              <CategoryGroup
-                key={cat}
-                cat={cat}
-                source="ner"
-                items={items}
-                enabled={cats[cat]}
-                selectedBoxId={selectedBoxId}
-                candidateById={candidateById}
-                onToggleCategory={() => toggleCat(cat)}
-                onToggleBox={toggle}
-                onGoTo={goToPage}
-                onFocusBox={(id, page) => {
-                  goToPage(page);
-                  focusBox(id);
-                }}
-              />
-            );
-          })}
-        </div>
+        </ScrollArea>
       </section>
 
-      <section className="space-y-2">
+      <section className="shrink-0 space-y-2">
         <div className="space-y-0.5">
           <h2 className="text-sm font-semibold">직접 마스크한 영역</h2>
           <p className="text-xs text-muted-foreground">
@@ -248,10 +200,40 @@ export function CandidatePanel() {
   );
 }
 
+function buildSourceGroups({
+  cat,
+  regexBoxes,
+  ocrBoxes,
+  nerBoxes,
+}: {
+  cat: DetectionCategory;
+  regexBoxes: DetectedBox[];
+  ocrBoxes: DetectedBox[];
+  nerBoxes: DetectedBox[];
+}): SourceGroup[] {
+  const groups: SourceGroup[] = [];
+  if (REGEX_CATEGORIES.includes(cat)) {
+    groups.push({
+      source: 'regex',
+      items: regexBoxes.filter((b) => b.category === cat),
+    });
+    groups.push({
+      source: 'ocr',
+      items: ocrBoxes.filter((b) => b.category === cat),
+    });
+  }
+  if (NER_CATEGORIES.includes(cat)) {
+    groups.push({
+      source: 'ner',
+      items: nerBoxes.filter((b) => b.category === cat),
+    });
+  }
+  return groups.filter((group) => group.items.length > 0);
+}
+
 type GroupProps = {
   cat: DetectionCategory;
-  source: 'regex' | 'ner' | 'ocr';
-  items: DetectedBox[];
+  sourceGroups: SourceGroup[];
   enabled: boolean;
   selectedBoxId: string | null;
   candidateById: Map<string, { confidence: number }>;
@@ -263,8 +245,7 @@ type GroupProps = {
 
 function CategoryGroup({
   cat,
-  source,
-  items,
+  sourceGroups,
   enabled,
   selectedBoxId,
   candidateById,
@@ -273,19 +254,10 @@ function CategoryGroup({
   onGoTo,
   onFocusBox,
 }: GroupProps) {
-  const [open, setOpen] = useState(items.length > 0 && items.length <= 30);
+  const itemCount = sourceGroups.reduce((sum, group) => sum + group.items.length, 0);
+  const [open, setOpen] = useState(itemCount > 0 && itemCount <= 30);
 
-  const byPage = useMemo(() => {
-    const map = new Map<number, DetectedBox[]>();
-    for (const b of items) {
-      const arr = map.get(b.pageIndex) ?? [];
-      arr.push(b);
-      map.set(b.pageIndex, arr);
-    }
-    return [...map.entries()].sort(([a], [b]) => a - b);
-  }, [items]);
-
-  const id = `cat-${source}-${cat}`;
+  const id = `cat-${cat}`;
 
   return (
     <div className="rounded-md border bg-card">
@@ -295,19 +267,18 @@ function CategoryGroup({
             id={id}
             checked={enabled}
             onCheckedChange={onToggleCategory}
-            disabled={items.length === 0}
+            disabled={itemCount === 0}
           />
           <span className={cn('h-2 w-2 rounded-full', CAT_COLORS[cat])} />
           <Label htmlFor={id} className="flex-1 cursor-pointer text-sm">
             {LABELS[cat]}
           </Label>
-          <SourceBadge source={source} />
-          <Badge variant="secondary">{items.length}</Badge>
+          <Badge variant="secondary">{itemCount}</Badge>
           <CollapsibleTrigger asChild>
             <button
               type="button"
               className="rounded p-1 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={items.length === 0}
+              disabled={itemCount === 0}
               aria-label={open ? '접기' : '펼치기'}
             >
               <ChevronRight
@@ -317,56 +288,17 @@ function CategoryGroup({
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent>
-          <div className="border-t bg-muted/30 px-2 py-1.5">
-            {byPage.map(([page, group]) => (
-              <div key={page} className="py-1">
-                <button
-                  type="button"
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-                  onClick={() => onGoTo(page)}
-                >
-                  p{page + 1} ({group.length})
-                </button>
-                <ul className="ml-2 mt-1 space-y-1">
-                  {group.map((b) => {
-                    const isSelected = selectedBoxId === b.id;
-                    const confidence = candidateById.get(b.id)?.confidence;
-                    return (
-                      <li key={b.id}>
-                        <button
-                          type="button"
-                          className={cn(
-                            'flex w-full items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-accent',
-                            isSelected && 'bg-accent',
-                          )}
-                          onClick={() => onFocusBox(b.id, b.pageIndex)}
-                          aria-label={`박스 #${b.id.slice(-6)} 위치로 이동`}
-                        >
-                          <span
-                            onClick={(e) => e.stopPropagation()}
-                            onPointerDown={(e) => e.stopPropagation()}
-                          >
-                            <Checkbox
-                              id={b.id}
-                              checked={b.enabled}
-                              onCheckedChange={() => onToggleBox(b.id)}
-                            />
-                          </span>
-                          <span className="text-xs font-normal text-muted-foreground">
-                            박스 #{b.id.slice(-6)}
-                          </span>
-                          {(b.source === 'ner' || b.source === 'ocr-ner' || b.source === 'ocr') &&
-                            typeof confidence === 'number' && (
-                              <span className="ml-auto text-[11px] text-muted-foreground">
-                                {confidence.toFixed(2)}
-                              </span>
-                            )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+          <div className="space-y-2 border-t bg-muted/30 px-2 py-1.5">
+            {sourceGroups.map((sourceGroup) => (
+              <SourceCandidateSection
+                key={sourceGroup.source}
+                sourceGroup={sourceGroup}
+                selectedBoxId={selectedBoxId}
+                candidateById={candidateById}
+                onToggleBox={onToggleBox}
+                onGoTo={onGoTo}
+                onFocusBox={onFocusBox}
+              />
             ))}
           </div>
         </CollapsibleContent>
@@ -375,7 +307,102 @@ function CategoryGroup({
   );
 }
 
-function SourceBadge({ source }: { source: 'regex' | 'ner' | 'ocr' }) {
+type SourceCandidateSectionProps = {
+  sourceGroup: SourceGroup;
+  selectedBoxId: string | null;
+  candidateById: Map<string, { confidence: number }>;
+  onToggleBox(id: string): void;
+  onGoTo(page: number): void;
+  onFocusBox(id: string, page: number): void;
+};
+
+function SourceCandidateSection({
+  sourceGroup,
+  selectedBoxId,
+  candidateById,
+  onToggleBox,
+  onGoTo,
+  onFocusBox,
+}: SourceCandidateSectionProps) {
+  const byPage = useMemo(() => {
+    const map = new Map<number, DetectedBox[]>();
+    for (const b of sourceGroup.items) {
+      const arr = map.get(b.pageIndex) ?? [];
+      arr.push(b);
+      map.set(b.pageIndex, arr);
+    }
+    return [...map.entries()].sort(([a], [b]) => a - b);
+  }, [sourceGroup.items]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 px-1">
+        <SourceBadge source={sourceGroup.source} />
+        <Badge variant="secondary">{sourceGroup.items.length}</Badge>
+      </div>
+      {byPage.map(([page, group]) => (
+        <div key={page} className="py-1">
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+            onClick={() => onGoTo(page)}
+          >
+            p{page + 1} ({group.length})
+          </button>
+          <ul className="ml-2 mt-1 space-y-1">
+            {group.map((b) => {
+              const isSelected = selectedBoxId === b.id;
+              const confidence = candidateById.get(b.id)?.confidence;
+              const confidenceLabel =
+                (b.source === 'ner' || b.source === 'ocr-ner' || b.source === 'ocr') &&
+                typeof confidence === 'number'
+                  ? confidence.toFixed(2)
+                  : null;
+              return (
+                <li key={b.id}>
+                  <div
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-accent',
+                      isSelected && 'bg-accent',
+                    )}
+                  >
+                    <span
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <Checkbox
+                        id={b.id}
+                        checked={b.enabled}
+                        onCheckedChange={() => onToggleBox(b.id)}
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => onFocusBox(b.id, b.pageIndex)}
+                      aria-label={`박스 #${b.id.slice(-6)} 위치로 이동`}
+                    >
+                      <span className="truncate text-xs font-normal text-muted-foreground">
+                        박스 #{b.id.slice(-6)}
+                      </span>
+                      {confidenceLabel !== null && (
+                        <span className="ml-auto text-[11px] text-muted-foreground">
+                          {confidenceLabel}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SourceBadge({ source }: { source: DetectionSource }) {
   if (source === 'regex') return <Badge variant="secondary">정규식</Badge>;
   if (source === 'ocr') return <Badge variant="outline">OCR</Badge>;
   return <Badge variant="warning">NER · 검수 필요</Badge>;

@@ -24,12 +24,14 @@ const NerRuntime = lazy(() => import('@/components/NerRuntime'));
 
 type Props = {
   embedded?: boolean;
+  autoDetect?: boolean;
+  autoOcr?: boolean;
 };
 
-export function SinglePage({ embedded = false }: Props) {
+export function SinglePage({ embedded = false, autoDetect = true, autoOcr = false }: Props) {
   useKeyboard();
-  useAutoDetect();
-  useOcrDetect();
+  useAutoDetect(autoDetect);
+  useOcrDetect({ auto: autoOcr });
   const { load } = usePdfDocument();
   const { apply } = useApply();
   const doc = useAppStore((s) => s.doc);
@@ -57,8 +59,11 @@ export function SinglePage({ embedded = false }: Props) {
         <Card className="flex min-h-0 flex-col overflow-hidden p-1 pt-3">
           {doc.kind === 'ready' ? (
             <ScrollArea className="flex-1">
-              <div className="p-3">
-                <div className="mb-3 flex items-center gap-2 border-b pb-3 text-xs">
+              <div
+                data-testid="single-sidebar-body"
+                className="flex h-full min-h-0 flex-col p-3"
+              >
+                <div className="mb-3 flex shrink-0 items-center gap-2 border-b pb-3 text-xs">
                   <Badge variant="outline">{doc.fileName}</Badge>
                   <span
                     className="whitespace-nowrap text-muted-foreground"
@@ -71,7 +76,9 @@ export function SinglePage({ embedded = false }: Props) {
                   <NerRuntime />
                 </Suspense>
                 <OcrStatus />
-                <CandidatePanel />
+                <div data-testid="candidate-panel-slot" className="min-h-0 flex-1">
+                  <CandidatePanel />
+                </div>
               </div>
             </ScrollArea>
           ) : (
