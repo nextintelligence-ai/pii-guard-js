@@ -12,16 +12,24 @@ import type { OcrLine } from '@/core/ocr/types';
 import type { NerBox } from '@/core/spanMap';
 
 const OCR_RENDER_SCALE = 2;
+const KNOWN_OCR_NER_RUNTIME_FAILURE_PATTERNS = [
+  'GatherBlockQuantized',
+  'NormalizeDispatchGroupSize Invalid dispatch group size',
+];
 
 type OcrDetectOptions = {
   auto?: boolean;
+};
+
+type OcrNerDetectResult = {
+  boxes: NerBox[];
+  disableForRun: boolean;
 };
 
 export function useOcrDetect(options: OcrDetectOptions = {}): void {
   const auto = options.auto ?? true;
   const doc = useAppStore((s) => s.doc);
   const docEpoch = useAppStore((s) => s.docEpoch);
-  const currentPage = useAppStore((s) => s.currentPage);
   const ocrRequest = useAppStore((s) => s.ocrRequest);
   const ner = useNerModel();
   const nerState = ner.state;
@@ -38,9 +46,10 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
         : request.kind === 'all'
           ? new Set(doc.pages.map((page) => page.index))
           : new Set<number>();
+    const priorityPage = useAppStore.getState().currentPage;
     const pages = [...doc.pages].sort((a, b) => {
-      if (a.index === currentPage) return -1;
-      if (b.index === currentPage) return 1;
+      if (a.index === priorityPage) return -1;
+      if (b.index === priorityPage) return 1;
       return a.index - b.index;
     });
     const isStaleJob = (): boolean =>
@@ -94,6 +103,7 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
       });
 
       let done = 0;
+      let ocrNerDisabledForRun = false;
       for (const pageIndex of targets) {
         if (isStaleJob()) return;
         useAppStore.getState().setOcrProgress({
@@ -117,8 +127,8 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
             renderScale: rendered.scale,
             lines: result.lines,
           });
-          const ocrNerBoxes =
-            canRunNer && nerWorker
+          const ocrNer =
+            canRunNer && nerWorker && !ocrNerDisabledForRun
               ? await detectOcrNerBoxes(
                   {
                     pageIndex,
@@ -128,7 +138,9 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
                   nerWorker,
                   isStaleJob,
                 )
-              : [];
+              : { boxes: [], disableForRun: false };
+          if (ocrNer.disableForRun) ocrNerDisabledForRun = true;
+          const ocrNerBoxes = ocrNer.boxes;
           if (isStaleJob()) return;
           const state = useAppStore.getState();
           const existingCandidates = state.candidates.filter(
@@ -183,7 +195,7 @@ export function useOcrDetect(options: OcrDetectOptions = {}): void {
     return () => {
       cancelled = true;
     };
-  }, [auto, doc, docEpoch, currentPage, ocrRequest, nerState, nerWorker]);
+  }, [auto, doc, docEpoch, ocrRequest, nerState, nerWorker]);
 }
 
 async function detectOcrNerBoxes(
@@ -194,12 +206,23 @@ async function detectOcrNerBoxes(
   },
   nerWorker: NonNullable<ReturnType<typeof useNerModel>['worker']>,
   isStaleJob: () => boolean,
-): Promise<NerBox[]> {
+): Promise<OcrNerDetectResult> {
   const { pageText } = ocrLinesToPageText(input);
-  if (pageText.trim().length === 0) return [];
-  const rawEntities = await nerWorker.classify(pageText);
+  if (pageText.trim().length === 0) return { boxes: [], disableForRun: false };
+  let rawEntities;
+  try {
+    rawEntities = await nerWorker.classify(pageText);
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (isKnownOcrNerRuntimeFailure(message)) {
+      logOcrNerDisabled({ pageIndex: input.pageIndex, message });
+      return { boxes: [], disableForRun: true };
+    }
+    logOcrNerFailure({ pageIndex: input.pageIndex, message });
+    return { boxes: [], disableForRun: false };
+  }
   const entities = filterNerEntitiesForText(pageText, rawEntities);
-  if (isStaleJob()) return [];
+  if (isStaleJob()) return { boxes: [], disableForRun: false };
   const boxes = ocrLinesToNerBoxes({ ...input, entities });
   logNerDebug('ocr classify result', {
     pageIndex: input.pageIndex,
@@ -209,7 +232,7 @@ async function detectOcrNerBoxes(
     droppedEntities: rawEntities.length - entities.length,
     boxes,
   });
-  return boxes;
+  return { boxes, disableForRun: false };
 }
 
 function getErrorMessage(error: unknown): string {
@@ -253,4 +276,24 @@ function logOcrFailure(details: { pageIndex: number; message: string }): void {
     pageIndex: details.pageIndex,
     message: details.message,
   });
+}
+
+function logOcrNerFailure(details: { pageIndex: number; message: string }): void {
+  console.warn('[useOcrDetect] OCR-NER 실패', {
+    page: details.pageIndex + 1,
+    pageIndex: details.pageIndex,
+    message: details.message,
+  });
+}
+
+function logOcrNerDisabled(details: { pageIndex: number; message: string }): void {
+  console.info('[useOcrDetect] OCR-NER 비활성화', {
+    page: details.pageIndex + 1,
+    pageIndex: details.pageIndex,
+    message: details.message,
+  });
+}
+
+function isKnownOcrNerRuntimeFailure(message: string): boolean {
+  return KNOWN_OCR_NER_RUNTIME_FAILURE_PATTERNS.some((pattern) => message.includes(pattern));
 }

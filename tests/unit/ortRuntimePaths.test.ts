@@ -9,7 +9,7 @@ describe('ORT runtime config', () => {
     });
   });
 
-  it('suppresses known WebGPU EP assignment warnings only', () => {
+  it('suppresses known ORT noise only', () => {
     const originalWarn = vi.fn();
     const originalLog = vi.fn();
     const originalError = vi.fn();
@@ -29,6 +29,9 @@ describe('ORT runtime config', () => {
     );
     target.error(
       '2026-04-30 [W:onnxruntime:, session_state.cc:1359 VerifyEachNodeIsAssignedToAnEp] Some nodes were not assigned to the preferred execution providers.',
+    );
+    target.error(
+      "An error occurred during model execution: \"Error: failed to call OrtRun(). ERROR_CODE: 1, ERROR_MESSAGE: Non-zero status code returned while running GatherBlockQuantized node. Name:'/model/embed_tokens/Gather_Quant' Status Message: program_manager.cc:22 NormalizeDispatchGroupSize Invalid dispatch group size (0, 1, 1)\".",
     );
     target.warn('다른 경고');
     target.log('다른 로그');

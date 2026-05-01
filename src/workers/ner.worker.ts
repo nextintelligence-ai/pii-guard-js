@@ -33,6 +33,7 @@ interface PipelineLoadFailure {
 let classifier: ((text: string, opts: { aggregation_strategy: 'simple' }) => Promise<RawEntity[]>) | null = null;
 let labelMap: Record<number, string> = {};
 let backend: NerBackend = 'wasm';
+let activeDtype: NerDtype = 'fp32';
 let activeModelDir: FileSystemDirectoryHandle | null = null;
 
 const api: NerWorkerApi = {
@@ -47,6 +48,7 @@ const api: NerWorkerApi = {
 
     const { pipe, backend: loadedBackend, dtype } = await loadBestPipeline();
     backend = loadedBackend;
+    activeDtype = dtype;
     classifier = pipe as never;
     const cfg = (pipe as unknown as { model: { config: { id2label?: Record<number, string> } } }).model
       .config;
@@ -67,7 +69,14 @@ const api: NerWorkerApi = {
       backend,
       chars: text.length,
     });
-    const out = await classifier(text, { aggregation_strategy: 'simple' });
+    let out: RawEntity[];
+    try {
+      out = await classifier(text, { aggregation_strategy: 'simple' });
+    } catch (error) {
+      const recovered = await recoverFromClassifyFailure(error);
+      if (!recovered || !classifier) throw error;
+      out = await classifier(text, { aggregation_strategy: 'simple' });
+    }
     const scored = out.filter((e) => e.score >= SCORE_FLOOR);
     const normalized = normalizeEntities(text, scored);
     if (normalized.skippedWithoutOffsets > 0) {
@@ -207,6 +216,40 @@ function loadFailureMessage({
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+async function recoverFromClassifyFailure(error: unknown): Promise<boolean> {
+  if (backend !== 'webgpu' || activeDtype !== 'q4') return false;
+  const hasFp32 = await hasModelFile('fp32');
+  if (!hasFp32) {
+    workerWarn('[ner.worker] WebGPU q4 classify 실패 — fp32 WASM fallback 모델이 없습니다.', {
+      backend,
+      dtype: activeDtype,
+      error,
+    });
+    return false;
+  }
+
+  workerWarn('[ner.worker] WebGPU q4 classify 실패 — fp32 WASM 으로 전환합니다.', {
+    backend,
+    dtype: activeDtype,
+    error,
+  });
+
+  const failures: PipelineLoadFailure[] = [];
+  const loaded = await tryLoadPipeline('wasm', 'fp32', failures);
+  if (!loaded) {
+    workerWarn('[ner.worker] fp32 WASM fallback 로드 실패', { failures });
+    return false;
+  }
+
+  backend = loaded.backend;
+  activeDtype = loaded.dtype;
+  classifier = loaded.pipe as never;
+  const cfg = (loaded.pipe as unknown as { model: { config: { id2label?: Record<number, string> } } }).model
+    .config;
+  labelMap = cfg.id2label ?? {};
+  return true;
 }
 
 const originalFetch = env.fetch;

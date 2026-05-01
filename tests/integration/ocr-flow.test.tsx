@@ -44,6 +44,20 @@ async function waitForStore(predicate: () => boolean): Promise<void> {
   throw new Error('store condition was not met');
 }
 
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('OCR 탐지 플로우', () => {
   let root: Root | null = null;
 
@@ -266,6 +280,165 @@ describe('OCR 탐지 플로우', () => {
       enabled: true,
     });
     expect(state.boxes[candidate!.id]?.bbox[0]).toBeGreaterThan(0);
+  });
+
+  it('known OCR-NER 런타임 오류는 경고를 반복하지 않고 OCR 후보 저장을 막지 않는다', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    fakeNerWorker.classify.mockRejectedValue(
+      new Error(
+        "failed to call OrtRun(). ERROR_CODE: 1, ERROR_MESSAGE: Non-zero status code returned while running GatherBlockQuantized node. Name:'/model/embed_tokens/Gather_Quant' Status Message: program_manager.cc:22 NormalizeDispatchGroupSize Invalid dispatch group size (0, 1, 1)",
+      ),
+    );
+    fakePdfWorker.inspectPageContent.mockImplementation((pageIndex: number) =>
+      Promise.resolve({
+        pageIndex,
+        pageAreaPt: 10000,
+        textCharCount: 0,
+        textLineCount: 0,
+        textAreaRatio: 0,
+        imageBlocks: [{ bbox: [0, 0, 100, 100], widthPx: 1000, heightPx: 1000, areaRatio: 1 }],
+        hasLargeImage: true,
+        shouldAutoOcr: true,
+      }),
+    );
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [
+        { index: 0, widthPt: 100, heightPt: 100, rotation: 0 },
+        { index: 1, widthPt: 100, heightPt: 100, rotation: 0 },
+      ],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+
+    await waitForStore(() => useAppStore.getState().ocrProgress.done === 2);
+
+    const state = useAppStore.getState();
+    expect(fakeNerWorker.classify).toHaveBeenCalledTimes(1);
+    expect(state.candidates.filter((candidate) => candidate.source === 'ocr')).toHaveLength(2);
+    expect(state.candidates.some((candidate) => candidate.source === 'ocr-ner')).toBe(false);
+    expect(consoleWarn).not.toHaveBeenCalledWith(
+      '[useOcrDetect] OCR-NER 실패',
+      expect.anything(),
+    );
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[useOcrDetect] OCR-NER 비활성화',
+      expect.objectContaining({
+        page: 1,
+        pageIndex: 0,
+        message: expect.stringContaining('GatherBlockQuantized'),
+      }),
+    );
+  });
+
+  it('OCR 진행 중 페이지 이동은 진행 중인 OCR job 을 재시작하지 않는다', async () => {
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const page0Recognition = deferred<{
+      lines: Array<{
+        id: string;
+        pageIndex: number;
+        text: string;
+        score: number;
+        poly: Array<{ x: number; y: number }>;
+      }>;
+    }>();
+    fakePdfWorker.inspectPageContent.mockImplementation((pageIndex: number) =>
+      Promise.resolve({
+        pageIndex,
+        pageAreaPt: 10000,
+        textCharCount: 0,
+        textLineCount: 0,
+        textAreaRatio: 0,
+        imageBlocks: [{ bbox: [0, 0, 100, 100], widthPx: 1000, heightPx: 1000, areaRatio: 1 }],
+        hasLargeImage: true,
+        shouldAutoOcr: true,
+      }),
+    );
+    fakeOcrWorker.recognizePng.mockImplementation(({ pageIndex }: { pageIndex: number }) => {
+      if (pageIndex === 0) return page0Recognition.promise;
+      return Promise.resolve({
+        lines: [
+          {
+            id: `line-${pageIndex}`,
+            pageIndex,
+            text: '주민번호 000000-0000001',
+            score: 0.93,
+            poly: [
+              { x: 0, y: 0 },
+              { x: 220, y: 0 },
+              { x: 220, y: 20 },
+              { x: 0, y: 20 },
+            ],
+          },
+        ],
+      });
+    });
+
+    function Probe() {
+      useOcrDetect();
+      return null;
+    }
+
+    useAppStore.getState().setDoc({
+      kind: 'ready',
+      fileName: 'scan.pdf',
+      pages: [
+        { index: 0, widthPt: 100, heightPt: 100, rotation: 0 },
+        { index: 1, widthPt: 100, heightPt: 100, rotation: 0 },
+      ],
+    });
+
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root?.render(<Probe />);
+    });
+    await waitForStore(() => fakeOcrWorker.recognizePng.mock.calls.length === 1);
+
+    await act(async () => {
+      useAppStore.getState().goToPage(1);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(useAppStore.getState().ocrProgress.currentPage).toBe(0);
+    expect(fakePdfWorker.renderPagePng).toHaveBeenCalledTimes(1);
+    expect(fakeOcrWorker.recognizePng).toHaveBeenCalledTimes(1);
+
+    page0Recognition.resolve({
+      lines: [
+        {
+          id: 'line-0',
+          pageIndex: 0,
+          text: '주민번호 000000-0000001',
+          score: 0.93,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+
+    await waitForStore(() => useAppStore.getState().ocrProgress.done === 2);
+
+    expect(fakePdfWorker.renderPagePng).toHaveBeenCalledTimes(2);
+    expect(fakeOcrWorker.recognizePng).toHaveBeenCalledTimes(2);
+    expect(consoleInfo).toHaveBeenCalledWith(
+      '[useOcrDetect] OCR 성공',
+      expect.objectContaining({ page: 2 }),
+    );
   });
 
   it('OCR-NER 디버그 플래그가 켜지면 OCR 원문과 NER 결과를 남긴다', async () => {

@@ -324,6 +324,68 @@ describe('ner.worker', () => {
     ]);
   });
 
+  it('WebGPU q4 classify 실행이 실패하면 fp32 WASM 으로 재시도한다', async () => {
+    await import('@/workers/ner.worker');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const q4Classifier = Object.assign(
+      vi.fn().mockRejectedValue(
+        new Error('GatherBlockQuantized Invalid dispatch group size (0, 1, 1)'),
+      ),
+      {
+        model: { config: { id2label: { 0: 'O', 1: 'private_person' } } },
+      },
+    );
+    const wasmClassifier = Object.assign(
+      vi.fn().mockResolvedValue([
+        {
+          entity_group: 'private_person',
+          score: 0.99,
+          word: 'Alice Smith',
+        },
+      ]),
+      {
+        model: { config: { id2label: { 0: 'O', 1: 'private_person' } } },
+      },
+    );
+    hf.pipeline.mockImplementation(async (_task, _model, opts) => {
+      if (opts?.device === 'webgpu' && opts.dtype === 'q4') return q4Classifier;
+      if (opts?.device === 'wasm' && opts.dtype === 'fp32') return wasmClassifier;
+      throw new Error('unexpected backend');
+    });
+
+    try {
+      await exposedApi().load(modelDirectory(['model_q4.onnx', 'model.onnx']));
+
+      const out = await exposedApi().classify('My name is Alice Smith.');
+
+      expect(out).toEqual([
+        {
+          entity_group: 'private_person',
+          score: 0.99,
+          word: 'Alice Smith',
+          start: 11,
+          end: 22,
+        },
+      ]);
+      expect(q4Classifier).toHaveBeenCalledTimes(1);
+      expect(wasmClassifier).toHaveBeenCalledTimes(1);
+      expect(hf.pipeline).toHaveBeenCalledWith(
+        'token-classification',
+        'privacy-filter',
+        { device: 'wasm', dtype: 'fp32' },
+      );
+      expect(warn).toHaveBeenCalledWith(
+        '[ner.worker] WebGPU q4 classify 실패 — fp32 WASM 으로 전환합니다.',
+        expect.objectContaining({
+          backend: 'webgpu',
+          dtype: 'q4',
+        }),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('PDF 줄바꿈과 모델 word 공백이 달라도 char offset 을 복원한다', async () => {
     await import('@/workers/ner.worker');
 

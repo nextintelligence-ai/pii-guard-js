@@ -21,6 +21,12 @@ const ORT_EP_ASSIGNMENT_WARNING_PATTERNS = [
   'Some nodes were not assigned to the preferred execution providers',
 ];
 
+const ORT_KNOWN_NOISE_PATTERNS = [
+  ...ORT_EP_ASSIGNMENT_WARNING_PATTERNS,
+  'GatherBlockQuantized',
+  'NormalizeDispatchGroupSize Invalid dispatch group size',
+];
+
 export function installOrtWarningFilter(target: WarnTarget = console): void {
   if (target[ORT_WARNING_FILTER_INSTALLED]) return;
 
@@ -28,7 +34,7 @@ export function installOrtWarningFilter(target: WarnTarget = console): void {
     const original = target[method].bind(target);
     target[method] = (...args: unknown[]) => {
       const message = args.map(String).join(' ');
-      if (ORT_EP_ASSIGNMENT_WARNING_PATTERNS.some((pattern) => message.includes(pattern))) {
+      if (ORT_KNOWN_NOISE_PATTERNS.some((pattern) => message.includes(pattern))) {
         return;
       }
       original(...args);
