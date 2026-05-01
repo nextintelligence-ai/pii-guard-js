@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
 import { detectOcrCandidates } from '@/core/ocr/detect';
 import { ocrLinesToNerBoxes, ocrLinesToPageText } from '@/core/ocr/ner';
+import {
+  filterOcrNerBoxes,
+  nerBoxesToCandidates,
+} from '@/core/ocr/nerCandidates';
 import { runBatchJob } from '@/core/batch/runBatchJob';
 import { filterNerEntitiesForText } from '@/core/nerEntityFilter';
 import { buildContextualNerMaps } from '@/core/nerContext';
@@ -12,10 +16,9 @@ import {
 import { entitiesToBoxes, serialize, type NerBox } from '@/core/spanMap';
 import { useNerModel } from '@/hooks/useNerModel';
 import { useBatchStore } from '@/state/batchStore';
-import { createId } from '@/utils/id';
 import { getOcrWorker } from '@/workers/ocrWorkerClient';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
-import type { Candidate, DetectionCategory } from '@/types/domain';
+import type { Candidate } from '@/types/domain';
 import type { NerWorkerApi } from '@/core/nerWorkerClient';
 import type { PdfWorkerApi } from '@/workers/pdf.worker.types';
 
@@ -131,7 +134,12 @@ function createOcrDetector(
       droppedEntities: rawEntities.length - entities.length,
       boxes: nerBoxes,
     });
-    return [...candidates, ...nerBoxesToCandidates(pageIndex, nerBoxes, 'ocr-ner')];
+    const ocrNerBoxes = filterOcrNerBoxes({
+      pageIndex,
+      boxes: nerBoxes,
+      primaryCandidates: candidates,
+    });
+    return [...candidates, ...nerBoxesToCandidates(pageIndex, ocrNerBoxes, 'ocr-ner')];
   };
 }
 
@@ -196,27 +204,6 @@ function createTextNerDetector(
 
     return nerBoxesToCandidates(pageIndex, dedupeNerBoxes(boxes), 'ner');
   };
-}
-
-function nerBoxesToCandidates(
-  pageIndex: number,
-  boxes: NerBox[],
-  source: Extract<Candidate['source'], 'ner' | 'ocr-ner'>,
-): Candidate[] {
-  return boxes.map((box) => ({
-    id: createId(),
-    pageIndex,
-    bbox: [
-      box.bbox.x,
-      box.bbox.y,
-      box.bbox.x + box.bbox.w,
-      box.bbox.y + box.bbox.h,
-    ],
-    text: '',
-    category: box.category as DetectionCategory,
-    confidence: box.score,
-    source,
-  }));
 }
 
 function dedupeNerBoxes(boxes: NerBox[]): NerBox[] {

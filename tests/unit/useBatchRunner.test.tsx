@@ -6,16 +6,23 @@ import { useBatchStore } from '@/state/batchStore';
 import { runBatchJob } from '@/core/batch/runBatchJob';
 import { getPdfWorker } from '@/workers/pdfWorkerClient';
 
-const { fakeNerWorker } = vi.hoisted(() => ({
+const { fakeNerWorker, fakeOcrWorker } = vi.hoisted(() => ({
   fakeNerWorker: {
     classify: vi.fn(),
     load: vi.fn(),
     unload: vi.fn(),
   },
+  fakeOcrWorker: {
+    recognizePng: vi.fn(),
+  },
 }));
 
 vi.mock('@/workers/pdfWorkerClient', () => ({
   getPdfWorker: vi.fn(),
+}));
+
+vi.mock('@/workers/ocrWorkerClient', () => ({
+  getOcrWorker: vi.fn(() => fakeOcrWorker),
 }));
 
 vi.mock('@/core/batch/runBatchJob', () => ({
@@ -204,5 +211,72 @@ describe('useBatchRunner', () => {
         ],
       }),
     );
+  });
+
+  it('batch OCR-NER 후보도 OCR 정규식 후보와 중복되면 제외한다', async () => {
+    const file = new File(['a'], 'batch-scan.pdf', { type: 'application/pdf' });
+    vi.mocked(getPdfWorker).mockResolvedValue({
+      renderPagePng: vi.fn().mockResolvedValue({
+        png: new Uint8Array([1, 2, 3]),
+        widthPx: 220,
+        heightPx: 20,
+        scale: 2,
+      }),
+    } as unknown as Awaited<ReturnType<typeof getPdfWorker>>);
+    fakeOcrWorker.recognizePng.mockResolvedValue({
+      lines: [
+        {
+          id: 'line-address',
+          pageIndex: 0,
+          text: '주소 서울특별시 중구 세종대로 110',
+          score: 0.97,
+          poly: [
+            { x: 0, y: 0 },
+            { x: 220, y: 0 },
+            { x: 220, y: 20 },
+            { x: 0, y: 20 },
+          ],
+        },
+      ],
+    });
+    fakeNerWorker.classify.mockResolvedValue([
+      {
+        entity_group: 'private_address',
+        start: 3,
+        end: 20,
+        score: 0.96,
+        word: '서울특별시 중구 세종대로',
+      },
+    ]);
+    vi.mocked(runBatchJob).mockImplementation(async (input) => {
+      const candidates = await input.ocrDetectPage!(0);
+      return {
+        status: 'done',
+        candidates,
+        candidateCount: candidates.length,
+        enabledBoxCount: candidates.length,
+        report: null,
+        outputBlob: new Blob(['ok'], { type: 'application/pdf' }),
+        errorMessage: null,
+        needsReview: false,
+      };
+    });
+    useBatchStore.getState().addFiles([file]);
+
+    const container = document.createElement('div');
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<Harness />);
+    });
+
+    await act(async () => {
+      controls?.start();
+    });
+
+    await waitFor(() => useBatchStore.getState().jobs[0]?.status === 'done');
+
+    const candidates = useBatchStore.getState().jobs[0]?.candidates ?? [];
+    expect(candidates.some((candidate) => candidate.source === 'ocr')).toBe(true);
+    expect(candidates.some((candidate) => candidate.source === 'ocr-ner')).toBe(false);
   });
 });
