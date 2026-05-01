@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { ScanSearch, Loader2 } from 'lucide-react';
 import { ApplyResultDialog } from '@/components/ApplyResultDialog';
 import { CandidatePanel } from '@/components/CandidatePanel';
@@ -18,6 +18,7 @@ import { useOcrDetect } from '@/hooks/useOcrDetect';
 import { usePdfDocument } from '@/hooks/usePdfDocument';
 import { useAppStore } from '@/state/store';
 import { useHelpDialogStore } from '@/state/helpDialogStore';
+import { usePendingFileStore } from '@/state/pendingFileStore';
 
 const NerRuntime = lazy(() => import('@/components/NerRuntime'));
 
@@ -29,6 +30,14 @@ export function SinglePage() {
   const { apply } = useApply();
   const doc = useAppStore((s) => s.doc);
   const openHelp = useHelpDialogStore((s) => s.openHelp);
+  const consumedPendingFile = useRef(false);
+
+  useEffect(() => {
+    if (consumedPendingFile.current) return;
+    consumedPendingFile.current = true;
+    const file = usePendingFileStore.getState().consumeSingleFile();
+    if (file) void load(file);
+  }, [load]);
 
   return (
     <>
